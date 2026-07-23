@@ -139,6 +139,45 @@ describe("withLock", () => {
     await expect(fileExists(lockPath)).resolves.toBe(false);
   });
 
+  it("resolves a race over one genuinely-stale lockfile to exactly one winner, every trial", async () => {
+    const staleTrialCount = 25;
+    const concurrentCallerCount = 8;
+
+    for (let trial = 0; trial < staleTrialCount; trial++) {
+      const trialLockPath = join(tempDir, `race-${String(trial)}.lock`);
+      await writeFile(
+        trialLockPath,
+        JSON.stringify({ pid: 999_999, timestamp: 0 }),
+        "utf-8",
+      );
+
+      const actionCalls: number[] = [];
+      const results = await Promise.all(
+        Array.from({ length: concurrentCallerCount }, (_, callerIndex) =>
+          withLock(
+            trialLockPath,
+            () => {
+              actionCalls.push(callerIndex);
+              return Promise.resolve(callerIndex);
+            },
+            { staleMs: 0 },
+          ),
+        ),
+      );
+
+      expect(actionCalls).toHaveLength(1);
+      const winners = results.filter((result) => result !== LOCK_BUSY);
+      expect(winners).toHaveLength(1);
+
+      const residualLockIsStale = await withLock(
+        trialLockPath,
+        () => Promise.resolve("cleanup"),
+        { staleMs: 0 },
+      );
+      expect(residualLockIsStale).toBe("cleanup");
+    }
+  });
+
   it("writes a payload containing the current pid and the injected now() timestamp", async () => {
     const now = (): number => 123_456_789;
     let capturedPayload: unknown;

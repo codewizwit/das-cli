@@ -1,0 +1,36 @@
+{
+  "name": "das-cli",
+  "version": "0.0.0",
+  "description": "Documentation as a Skill: convert a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill.",
+  "type": "module",
+  "packageManager": "pnpm@10.18.2",
+  "bin": {
+    "das": "dist/bin/das.js"
+  },
+  "engines": {
+    "node": ">=20.12.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^8.4.0",
+    "chalk": "^5.6.0",
+    "commander": "^14.0.0",
+    "gray-matter": "^4.0.3",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-tsdoc": "^0.5.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}

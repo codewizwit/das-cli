@@ -88,6 +88,24 @@ describe("parseGithubUrl", () => {
           subpath: null,
         },
       ],
+      [
+        "semver-ish ref with nested subpath",
+        "https://github.com/octocat/hello-world/tree/v2.1.0/docs/guides/intro",
+        {
+          url: "https://github.com/octocat/hello-world.git",
+          ref: "v2.1.0",
+          subpath: "docs/guides/intro",
+        },
+      ],
+      [
+        ".git suffix is stripped case-insensitively",
+        "https://github.com/octocat/REPO.GIT",
+        {
+          url: "https://github.com/octocat/REPO.git",
+          ref: null,
+          subpath: null,
+        },
+      ],
     ])("%s", (_description, input, expected) => {
       expect(parseGithubUrl(input)).toEqual(expected);
     });
@@ -142,6 +160,26 @@ describe("parseGithubUrl", () => {
       [
         "blob form with ref but no filepath",
         "https://github.com/octocat/hello-world/blob/main",
+      ],
+      [
+        "ref is a flag-injection payload",
+        "https://github.com/octocat/hello-world/tree/--upload-pack=touch%20pwned",
+      ],
+      [
+        "ref starts with a dash",
+        "https://github.com/octocat/hello-world/tree/-oProxyCommand=x",
+      ],
+      [
+        "subpath segment starts with a dash",
+        "https://github.com/octocat/hello-world/tree/main/-rf",
+      ],
+      [
+        "subpath segment is a percent-encoded traversal payload",
+        "https://github.com/octocat/hello-world/tree/main/a%2f..%2f..%2fetc%2fpasswd",
+      ],
+      [
+        "default https port made explicit",
+        "https://github.com:443/octocat/hello-world",
       ],
     ])("%s", (_description, input) => {
       expect(() => parseGithubUrl(input)).toThrow(UnsupportedSourceError);

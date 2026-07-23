@@ -1,10 +1,14 @@
-const importOrExportPattern = /^(?:import|export)\b/;
+const importStatementPattern = /^import\s.*['"]/;
+const exportStatementPattern =
+  /^export\s+(?:default|const|let|var|function|async|class|\{)/;
 const admonitionClosePattern = /^:::$/;
 const admonitionOpenPattern = /^:::(\S.*)$/;
-const tabItemInlinePattern =
-  /^<TabItem\s+label="([^"]*)"[^>]*>(.*)<\/TabItem>$/;
-const tabItemOpenPattern = /^<TabItem\s+label="([^"]*)"[^>]*>$/;
+const tabItemInlinePattern = /^<TabItem\b([^>]*)>(.*)<\/TabItem>$/;
+const tabItemOpenPattern = /^<TabItem\b([^>]*)>$/;
+const tabItemClosePattern = /^<\/TabItem>$/;
+const labelAttributePattern = /label=["']([^"']*)["']/;
 const selfClosingTagPattern = /^<([A-Za-z][\w.-]*)(?:\s[^>]*)?\/>$/;
+const inlinePairedTagPattern = /^<([A-Za-z][\w.-]*)(?:\s[^>]*)?>(.*)<\/\1>$/;
 const openingTagPattern = /^<[A-Za-z][\w.-]*(?:\s[^>]*)?(?<!\/)>$/;
 const closingTagPattern = /^<\/[A-Za-z][\w.-]*>$/;
 
@@ -12,15 +16,23 @@ function capitalize(value: string): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
 }
 
+function extractLabel(attributes: string): string | undefined {
+  const match = labelAttributePattern.exec(attributes);
+  return match?.[1];
+}
+
 /**
  * Strip MDX-specific syntax from a document body, leaving plain Markdown.
  *
  * Processes the body line by line, leaving fenced code regions untouched.
- * Outside fences: import/export statements are dropped, `:::type` admonitions
- * become `**Type:**` labels, `<Tabs>`/`<TabItem>` blocks are flattened into
- * `**label:**` subsections, self-closing components become a visible
- * placeholder, and other paired tags are removed while keeping their
- * children.
+ * Outside fences: lines that look like import/export statements (not prose
+ * that merely starts with those words) are dropped; `:::type` admonitions
+ * become `**Type:**` labels; `<Tabs>`/`<TabItem>` blocks are flattened into
+ * `**label:**` subsections, with the label read from a `label` attribute in
+ * any position or quote style and no heading emitted when it's absent;
+ * self-closing components become a visible placeholder; and other paired
+ * tags, whether split across lines or written inline on one line, are
+ * removed while keeping their children.
  *
  * @param body - The document body, with frontmatter already removed
  * @returns The body with MDX syntax stripped
@@ -68,7 +80,10 @@ export function stripMdx(body: string): string {
       continue;
     }
 
-    if (importOrExportPattern.test(trimmedLine)) {
+    if (
+      importStatementPattern.test(trimmedLine) ||
+      exportStatementPattern.test(trimmedLine)
+    ) {
       continue;
     }
 
@@ -85,18 +100,30 @@ export function stripMdx(body: string): string {
 
     const tabItemInlineMatch = tabItemInlinePattern.exec(trimmedLine);
     if (tabItemInlineMatch) {
-      const [, label = "", content = ""] = tabItemInlineMatch;
-      pushContent(`**${label}:**`);
-      output.push("");
-      output.push(content);
+      const [, attributes = "", content = ""] = tabItemInlineMatch;
+      const label = extractLabel(attributes);
+      if (label !== undefined) {
+        pushContent(`**${label}:**`);
+        pendingBlank = true;
+      }
+      pushContent(content);
       pendingBlank = true;
       continue;
     }
 
     const tabItemOpenMatch = tabItemOpenPattern.exec(trimmedLine);
     if (tabItemOpenMatch) {
-      const [, label = ""] = tabItemOpenMatch;
-      pushContent(`**${label}:**`);
+      const [, attributes = ""] = tabItemOpenMatch;
+      const label = extractLabel(attributes);
+      if (label !== undefined) {
+        pushContent(`**${label}:**`);
+        pendingBlank = true;
+      }
+      continue;
+    }
+
+    if (tabItemClosePattern.test(trimmedLine)) {
+      pendingBlank = true;
       continue;
     }
 
@@ -104,6 +131,13 @@ export function stripMdx(body: string): string {
     if (selfClosingMatch) {
       const [, componentName = ""] = selfClosingMatch;
       pushContent(`[unrendered component: ${componentName}]`);
+      continue;
+    }
+
+    const inlinePairedTagMatch = inlinePairedTagPattern.exec(trimmedLine);
+    if (inlinePairedTagMatch) {
+      const [, , innerContent = ""] = inlinePairedTagMatch;
+      pushContent(innerContent);
       continue;
     }
 

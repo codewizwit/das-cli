@@ -48,10 +48,11 @@ export function sanitizeSlug(headingText: string): string {
   const collapsed = filtered.replace(/-+/g, "-");
   const trimmed = collapsed.replace(/^-+|-+$/g, "");
   const capped = trimmed.slice(0, 64);
+  const retrimmed = capped.replace(/-+$/, "");
 
-  if (capped.length === 0 || reservedNames.has(capped)) {
+  if (retrimmed.length === 0 || reservedNames.has(retrimmed)) {
     return "section";
   }
 
-  return capped;
+  return retrimmed;
 }

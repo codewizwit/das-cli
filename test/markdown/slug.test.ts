@@ -28,4 +28,18 @@ describe("sanitizeSlug", () => {
   it("falls back to section for empty results", () => {
     expect(sanitizeSlug("!!!")).toBe("section");
   });
+
+  it("re-trims trailing dashes after truncation", () => {
+    expect(sanitizeSlug("x".repeat(63) + " " + "y".repeat(5))).toBe(
+      "x".repeat(63),
+    );
+  });
+
+  it("rejects fullwidth confusables that normalize into reserved names", () => {
+    expect(sanitizeSlug("ＣＯＮ")).toBe("section");
+  });
+
+  it("falls back to section for zero-width-only input", () => {
+    expect(sanitizeSlug("​​")).toBe("section");
+  });
 });

@@ -8,14 +8,18 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SLICER_VERSION, type DasJson } from "../../src/emitter/das-json.js";
 import type { EmitFile } from "../../src/types.js";
 import type * as FsPromises from "node:fs/promises";
 
-const { renameFailureFlag } = vi.hoisted(() => ({
-  renameFailureFlag: { armed: false },
+const { fsFailureState } = vi.hoisted(() => ({
+  fsFailureState: {
+    renameCallCount: 0,
+    failRenameOnCalls: new Set<number>(),
+    failRmWhen: (_path: string): boolean => false,
+  },
 }));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -27,11 +31,26 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         source: Parameters<typeof actual.rename>[0],
         destination: Parameters<typeof actual.rename>[1],
       ) => {
-        if (renameFailureFlag.armed) {
-          renameFailureFlag.armed = false;
-          throw new Error("simulated rename failure");
+        fsFailureState.renameCallCount += 1;
+        if (
+          fsFailureState.failRenameOnCalls.has(fsFailureState.renameCallCount)
+        ) {
+          throw new Error(
+            `simulated rename failure (call ${String(fsFailureState.renameCallCount)})`,
+          );
         }
         return actual.rename(source, destination);
+      },
+    ),
+    rm: vi.fn(
+      async (
+        path: Parameters<typeof actual.rm>[0],
+        options?: Parameters<typeof actual.rm>[1],
+      ) => {
+        if (typeof path === "string" && fsFailureState.failRmWhen(path)) {
+          throw new Error(`simulated rm failure for ${path}`);
+        }
+        return actual.rm(path, options);
       },
     ),
   };
@@ -67,6 +86,20 @@ function dasJsonFile(overrides: Partial<DasJson> = {}): EmitFile {
   };
 }
 
+function asideDirPathFor(resolvedSkillDir: string): string {
+  return join(
+    dirname(resolvedSkillDir),
+    `.${basename(resolvedSkillDir)}.das-old-${String(process.pid)}`,
+  );
+}
+
+function recoveryBreadcrumbPathFor(resolvedSkillDir: string): string {
+  return join(
+    dirname(resolvedSkillDir),
+    `das-recovery-${basename(resolvedSkillDir)}-${String(process.pid)}.txt`,
+  );
+}
+
 describe("writeSkillTransactional", () => {
   let parentDir: string;
   let skillDir: string;
@@ -77,7 +110,9 @@ describe("writeSkillTransactional", () => {
   });
 
   afterEach(async () => {
-    renameFailureFlag.armed = false;
+    fsFailureState.renameCallCount = 0;
+    fsFailureState.failRenameOnCalls.clear();
+    fsFailureState.failRmWhen = () => false;
     await rm(parentDir, { recursive: true, force: true });
   });
 
@@ -230,7 +265,7 @@ describe("writeSkillTransactional", () => {
     await expect(readdir(parentDir)).resolves.toEqual(["skill"]);
   });
 
-  it("restores the previous tree when the atomic rename swap fails", async () => {
+  it("restores the previous tree when the swap-in rename fails", async () => {
     await mkdir(skillDir, { recursive: true });
     await writeFile(join(skillDir, "das.json"), dasJsonFile().content, "utf-8");
     await writeFile(join(skillDir, "SKILL.md"), "original\n", "utf-8");
@@ -240,15 +275,106 @@ describe("writeSkillTransactional", () => {
       { relativePath: "SKILL.md", content: "new content\n" },
     ];
 
-    renameFailureFlag.armed = true;
+    fsFailureState.failRenameOnCalls.add(2);
 
     await expect(writeSkillTransactional(skillDir, files)).rejects.toThrow(
-      "simulated rename failure",
+      "simulated rename failure (call 2)",
     );
 
     await expect(readFile(join(skillDir, "SKILL.md"), "utf-8")).resolves.toBe(
       "original\n",
     );
     await expect(readdir(parentDir)).resolves.toEqual(["skill"]);
+  });
+
+  it("throws an AggregateError naming the aside path when both the swap-in and restore renames fail", async () => {
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "das.json"), dasJsonFile().content, "utf-8");
+    await writeFile(join(skillDir, "SKILL.md"), "original\n", "utf-8");
+
+    const files: EmitFile[] = [
+      dasJsonFile(),
+      { relativePath: "SKILL.md", content: "new content\n" },
+    ];
+
+    fsFailureState.failRenameOnCalls.add(2);
+    fsFailureState.failRenameOnCalls.add(3);
+
+    const asideDir = asideDirPathFor(skillDir);
+    const error: unknown = await writeSkillTransactional(skillDir, files).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(AggregateError);
+    expect((error as AggregateError).message).toContain(asideDir);
+    await expect(readFile(join(asideDir, "SKILL.md"), "utf-8")).resolves.toBe(
+      "original\n",
+    );
+  });
+
+  it("writes a recovery breadcrumb naming the aside path when both renames fail", async () => {
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "das.json"), dasJsonFile().content, "utf-8");
+    await writeFile(join(skillDir, "SKILL.md"), "original\n", "utf-8");
+
+    const files: EmitFile[] = [
+      dasJsonFile(),
+      { relativePath: "SKILL.md", content: "new content\n" },
+    ];
+
+    fsFailureState.failRenameOnCalls.add(2);
+    fsFailureState.failRenameOnCalls.add(3);
+
+    await expect(writeSkillTransactional(skillDir, files)).rejects.toThrow(
+      AggregateError,
+    );
+
+    const asideDir = asideDirPathFor(skillDir);
+    const breadcrumbPath = recoveryBreadcrumbPathFor(skillDir);
+    await expect(readFile(breadcrumbPath, "utf-8")).resolves.toContain(
+      asideDir,
+    );
+  });
+
+  it("does not let a failing temp-dir cleanup mask the double-fault AggregateError", async () => {
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "das.json"), dasJsonFile().content, "utf-8");
+    await writeFile(join(skillDir, "SKILL.md"), "original\n", "utf-8");
+
+    const files: EmitFile[] = [
+      dasJsonFile(),
+      { relativePath: "SKILL.md", content: "new content\n" },
+    ];
+
+    fsFailureState.failRenameOnCalls.add(2);
+    fsFailureState.failRenameOnCalls.add(3);
+    fsFailureState.failRmWhen = (path) => path.includes(".das-tmp-");
+
+    const error: unknown = await writeSkillTransactional(skillDir, files).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(AggregateError);
+  });
+
+  it("resolves successfully when swap-in succeeds but removing the aside dir fails", async () => {
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(join(skillDir, "das.json"), dasJsonFile().content, "utf-8");
+    await writeFile(join(skillDir, "SKILL.md"), "original\n", "utf-8");
+
+    const files: EmitFile[] = [
+      dasJsonFile(),
+      { relativePath: "SKILL.md", content: "new content\n" },
+    ];
+
+    fsFailureState.failRmWhen = (path) => path.includes(".das-old-");
+
+    await expect(
+      writeSkillTransactional(skillDir, files),
+    ).resolves.toBeUndefined();
+
+    await expect(readFile(join(skillDir, "SKILL.md"), "utf-8")).resolves.toBe(
+      "new content\n",
+    );
   });
 });

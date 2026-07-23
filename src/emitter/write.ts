@@ -95,6 +95,44 @@ async function createTempSiblingDir(
   }
 }
 
+function recoveryBreadcrumbPath(
+  parentDir: string,
+  resolvedSkillDir: string,
+): string {
+  return join(
+    parentDir,
+    `das-recovery-${basename(resolvedSkillDir)}-${String(process.pid)}.txt`,
+  );
+}
+
+async function writeRecoveryBreadcrumb(
+  parentDir: string,
+  resolvedSkillDir: string,
+  asideDir: string,
+): Promise<void> {
+  const breadcrumbPath = recoveryBreadcrumbPath(parentDir, resolvedSkillDir);
+  const message = `Manual recovery needed: the previous contents of ${resolvedSkillDir} were moved to ${asideDir} and could not be restored automatically. Move ${asideDir} back to ${resolvedSkillDir} by hand.\n`;
+
+  try {
+    await writeFile(breadcrumbPath, message, "utf-8");
+  } catch {
+    /* best-effort persistent breadcrumb; a failure to write it must not block the restore attempt */
+  }
+}
+
+async function removeRecoveryBreadcrumb(
+  parentDir: string,
+  resolvedSkillDir: string,
+): Promise<void> {
+  const breadcrumbPath = recoveryBreadcrumbPath(parentDir, resolvedSkillDir);
+
+  try {
+    await rm(breadcrumbPath, { force: true });
+  } catch {
+    /* best-effort cleanup of a transient breadcrumb once recovery was no longer needed */
+  }
+}
+
 async function swapIntoPlace(
   resolvedSkillDir: string,
   tempDir: string,
@@ -114,12 +152,14 @@ async function swapIntoPlace(
     await rename(tempDir, resolvedSkillDir);
   } catch (swapError) {
     if (targetExisted) {
+      await writeRecoveryBreadcrumb(parentDir, resolvedSkillDir, asideDir);
       try {
         await rename(asideDir, resolvedSkillDir);
+        await removeRecoveryBreadcrumb(parentDir, resolvedSkillDir);
       } catch (restoreError) {
         throw new AggregateError(
           [swapError, restoreError],
-          `Failed to swap in the new skill tree for ${resolvedSkillDir} and failed to restore the previous tree from ${asideDir}; manual recovery required`,
+          `Failed to swap in the new skill tree for ${resolvedSkillDir} and failed to restore the previous tree from ${asideDir}; manual recovery required, see ${recoveryBreadcrumbPath(parentDir, resolvedSkillDir)}`,
         );
       }
     }
@@ -127,7 +167,11 @@ async function swapIntoPlace(
   }
 
   if (targetExisted) {
-    await rm(asideDir, { recursive: true, force: true });
+    try {
+      await rm(asideDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort cleanup; the swap already succeeded and must not fail the caller over a stale aside dir */
+    }
   }
 }
 
@@ -175,6 +219,10 @@ export async function writeSkillTransactional(
 
     await swapIntoPlace(resolvedSkillDir, tempDir, targetExisted);
   } finally {
-    await rm(tempDir, { recursive: true, force: true });
+    try {
+      await rm(tempDir, { recursive: true, force: true });
+    } catch {
+      /* best-effort cleanup; a failure here must never mask the primary swap or build error */
+    }
   }
 }

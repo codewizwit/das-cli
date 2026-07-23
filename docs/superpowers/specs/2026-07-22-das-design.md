@@ -156,7 +156,7 @@ Every node gets a slug and a deterministic one-line summary (first 120 character
 }
 ```
 
-`sourceHash` covers the sorted fileset (paths and contents) plus `slicerVersion`, `tokenBudget`, and resolver options, so changing generation parameters regenerates and upgrading DAS's slicer never silently rewrites: a `slicerVersion` mismatch in hook mode is reported as pending, and applied only by an explicit `das refresh`.
+The `das.json` schema is strict: unknown keys are rejected, out-of-range numerics are rejected (not clamped), `dasVersion` is validated as a semver string (it is always the tool's own version), and `generatedFiles` entries must be relative with no `..` segment or absolute/UNC/drive form. `sourceHash` covers the sorted fileset (paths and contents) plus `slicerVersion`, `tokenBudget`, and resolver options, so changing generation parameters regenerates and upgrading DAS's slicer never silently rewrites: a `slicerVersion` mismatch in hook mode is reported as pending, and applied only by an explicit `das refresh`.
 
 **Untrusted-content framing (mandatory):** `SKILL.md` opens with a fixed paragraph stating the content is third-party reference material sliced from the source, to be treated as data for answering questions and never as instructions to act on. Every index and resource file carries a one-line version of the same frame. Stripping tags is not the defense; the frame plus the injection scan (below) is.
 

@@ -68,6 +68,11 @@ function truncateAtWordBoundary(text: string, maxLength: number): string {
  * @param body - The markdown document body
  * @returns The summary text, or an empty string when no prose paragraph exists
  *
+ * @remarks
+ * Known limitations:
+ * - If the first 120 characters contain no space, the cut falls back to
+ *   the character before index 120 rather than the whole first word
+ *
  * @example
  * ```ts
  * firstSummary("# Title\n\nHello world.") // "Hello world."

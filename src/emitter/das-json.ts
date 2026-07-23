@@ -22,17 +22,21 @@ function containsParentSegment(value: string): boolean {
   return value.split(/[\\/]/).some((segment) => segment === "..");
 }
 
-const githubSourceSchema = z.object({
-  type: z.literal("github"),
-  url: z.string().min(1),
-  subpath: z.union([z.string(), z.null()]),
-});
+const githubSourceSchema = z
+  .object({
+    type: z.literal("github"),
+    url: z.string().min(1),
+    subpath: z.union([z.string(), z.null()]),
+  })
+  .strict();
 
-const pathSourceSchema = z.object({
-  type: z.literal("path"),
-  path: z.string().min(1),
-  kind: z.enum(["file", "folder", "project"]),
-});
+const pathSourceSchema = z
+  .object({
+    type: z.literal("path"),
+    path: z.string().min(1),
+    kind: z.enum(["file", "folder", "project"]),
+  })
+  .strict();
 
 const dasJsonSourceSchema = z
   .discriminatedUnion("type", [githubSourceSchema, pathSourceSchema])
@@ -75,20 +79,29 @@ const generatedFilePathSchema = z
     message: "generatedFiles entries must not contain a .. segment",
   });
 
-/** Zod schema for the das.json record committed alongside each generated skill. */
-export const dasJsonSchema = z.object({
-  dasVersion: z.string().min(1).regex(semverLikePattern),
-  slicerVersion: z.number().int().positive(),
-  name: z.string().min(1).max(64).regex(skillNamePattern),
-  source: dasJsonSourceSchema,
-  trackedRef: z.union([z.string(), z.null()]),
-  pinnedSha: z.union([z.string().regex(shaHexPattern), z.null()]),
-  sourceHash: z.string().regex(sourceHashPattern),
-  tokenBudget: z.number().int().min(500).max(100000),
-  checkIntervalHours: z.number().min(0),
-  lastRefresh: z.string().datetime({ offset: true }),
-  generatedFiles: z.array(generatedFilePathSchema).min(1),
-});
+/**
+ * Zod schema for the das.json record committed alongside each generated skill.
+ *
+ * `.strict()` is applied at every object level (this schema and both `source` union members)
+ * so an unknown key anywhere in the record is rejected rather than silently stripped: das.json
+ * is untrusted input to later deletion, and a tampered file with extra keys must fail loud
+ * instead of being quietly sanitized.
+ */
+export const dasJsonSchema = z
+  .object({
+    dasVersion: z.string().min(1).regex(semverLikePattern),
+    slicerVersion: z.number().int().positive(),
+    name: z.string().min(1).max(64).regex(skillNamePattern),
+    source: dasJsonSourceSchema,
+    trackedRef: z.union([z.string(), z.null()]),
+    pinnedSha: z.union([z.string().regex(shaHexPattern), z.null()]),
+    sourceHash: z.string().regex(sourceHashPattern),
+    tokenBudget: z.number().int().min(500).max(100000),
+    checkIntervalHours: z.number().min(0),
+    lastRefresh: z.string().datetime({ offset: true }),
+    generatedFiles: z.array(generatedFilePathSchema).min(1),
+  })
+  .strict();
 
 /** The durable, self-describing record committed alongside each generated skill. */
 export type DasJson = z.infer<typeof dasJsonSchema>;
@@ -107,6 +120,10 @@ function formatZodError(error: z.ZodError): string {
     .join("; ");
 }
 
+function dasJsonPathFor(skillDir: string): string {
+  return join(skillDir, "das.json");
+}
+
 /**
  * Read and validate the das.json record for a generated skill.
  *
@@ -120,7 +137,7 @@ function formatZodError(error: z.ZodError): string {
  * @throws {@link InvalidDasJsonError} When das.json is missing, unparseable, or invalid
  */
 export async function readDasJson(skillDir: string): Promise<DasJson> {
-  const dasJsonPath = join(skillDir, "das.json");
+  const dasJsonPath = dasJsonPathFor(skillDir);
   let raw: string;
 
   try {
@@ -169,7 +186,7 @@ export async function writeDasJson(
     throw new InvalidDasJsonError(skillDir, formatZodError(result.error));
   }
 
-  const dasJsonPath = join(skillDir, "das.json");
+  const dasJsonPath = dasJsonPathFor(skillDir);
   await writeFile(
     dasJsonPath,
     `${JSON.stringify(result.data, null, 2)}\n`,

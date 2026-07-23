@@ -192,6 +192,24 @@ describe("das-json", () => {
     );
   });
 
+  it.each([
+    "/etc/passwd",
+    "C:\\Windows\\x.md",
+    "\\\\server\\share\\x.md",
+    "..\\..\\x.md",
+  ])(
+    "rejects the cross-platform unsafe generatedFiles entry %s",
+    async (unsafeEntry) => {
+      const data: DasJson = {
+        ...validDasJson(),
+        generatedFiles: ["SKILL.md", unsafeEntry],
+      };
+      await expect(writeDasJson(skillDir, data)).rejects.toThrow(
+        InvalidDasJsonError,
+      );
+    },
+  );
+
   it("rejects an empty generatedFiles array", async () => {
     const data: DasJson = { ...validDasJson(), generatedFiles: [] };
     await expect(writeDasJson(skillDir, data)).rejects.toThrow(
@@ -205,4 +223,116 @@ describe("das-json", () => {
       InvalidDasJsonError,
     );
   });
+
+  it("rejects das.json with an unknown top-level key", async () => {
+    const dataWithExtraKey = { ...validDasJson(), extraField: "nope" };
+    await writeFile(
+      join(skillDir, "das.json"),
+      JSON.stringify(dataWithExtraKey),
+      "utf-8",
+    );
+    await expect(readDasJson(skillDir)).rejects.toThrow(InvalidDasJsonError);
+  });
+
+  it("rejects das.json with an unknown key inside the github source object", async () => {
+    const data = validDasJson();
+    const sourceWithExtraKey = { ...data.source, extraField: "nope" };
+    await writeFile(
+      join(skillDir, "das.json"),
+      JSON.stringify({ ...data, source: sourceWithExtraKey }),
+      "utf-8",
+    );
+    await expect(readDasJson(skillDir)).rejects.toThrow(InvalidDasJsonError);
+  });
+
+  it("round-trips a github source with .strict() applied", async () => {
+    const data = validDasJson();
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result).toEqual(data);
+  });
+
+  it("round-trips a path source with .strict() applied", async () => {
+    const data: DasJson = {
+      ...validDasJson(),
+      source: { type: "path", path: "/Users/alex/docs", kind: "project" },
+    };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result).toEqual(data);
+  });
+
+  it("accepts a tokenBudget of exactly 500", async () => {
+    const data: DasJson = { ...validDasJson(), tokenBudget: 500 };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.tokenBudget).toBe(500);
+  });
+
+  it("accepts a tokenBudget of exactly 100000", async () => {
+    const data: DasJson = { ...validDasJson(), tokenBudget: 100000 };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.tokenBudget).toBe(100000);
+  });
+
+  it("accepts a checkIntervalHours of exactly 0", async () => {
+    const data: DasJson = { ...validDasJson(), checkIntervalHours: 0 };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.checkIntervalHours).toBe(0);
+  });
+
+  it("accepts a null pinnedSha and a null trackedRef", async () => {
+    const data: DasJson = {
+      ...validDasJson(),
+      pinnedSha: null,
+      trackedRef: null,
+    };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.pinnedSha).toBeNull();
+    expect(result.trackedRef).toBeNull();
+  });
+
+  it("rejects a github url where userinfo carries the github.com host to evil.com", async () => {
+    const data: DasJson = {
+      ...validDasJson(),
+      source: {
+        type: "github",
+        url: "https://github.com@evil.com/o/r",
+        subpath: null,
+      },
+    };
+    await expect(writeDasJson(skillDir, data)).rejects.toThrow(
+      InvalidDasJsonError,
+    );
+  });
+
+  it("accepts a github url with unrelated userinfo before the github.com host", async () => {
+    const data: DasJson = {
+      ...validDasJson(),
+      source: {
+        type: "github",
+        url: "https://evil.com@github.com/o/r",
+        subpath: null,
+      },
+    };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.source).toEqual(data.source);
+  });
+
+  it.each(["https://gist.github.com/o/r", "https://github.com.evil.com/o/r"])(
+    "rejects a github url with the look-alike host %s",
+    async (url) => {
+      const data: DasJson = {
+        ...validDasJson(),
+        source: { type: "github", url, subpath: null },
+      };
+      await expect(writeDasJson(skillDir, data)).rejects.toThrow(
+        InvalidDasJsonError,
+      );
+    },
+  );
 });

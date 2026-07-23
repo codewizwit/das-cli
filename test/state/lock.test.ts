@@ -9,7 +9,42 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as FsPromises from "node:fs/promises";
 import { LOCK_BUSY, withLock } from "../../src/state/lock.js";
+
+const { claimRenameHooks } = vi.hoisted(() => ({
+  claimRenameHooks: {
+    before: undefined as (() => Promise<void>) | undefined,
+    after: undefined as (() => Promise<void>) | undefined,
+  },
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  return {
+    ...actual,
+    rename: vi.fn(
+      async (
+        source: Parameters<typeof actual.rename>[0],
+        destination: Parameters<typeof actual.rename>[1],
+      ) => {
+        const beforeHook = claimRenameHooks.before;
+        claimRenameHooks.before = undefined;
+        if (beforeHook) {
+          await beforeHook();
+        }
+
+        await actual.rename(source, destination);
+
+        const afterHook = claimRenameHooks.after;
+        claimRenameHooks.after = undefined;
+        if (afterHook) {
+          await afterHook();
+        }
+      },
+    ),
+  };
+});
 
 async function fileExists(path: string): Promise<boolean> {
   try {
@@ -176,6 +211,63 @@ describe("withLock", () => {
       );
       expect(residualLockIsStale).toBe("cleanup");
     }
+  });
+
+  it("never clobbers a lock a fresh caller acquired while restoring a rejected claim", async () => {
+    const originalStaleContent = JSON.stringify({
+      pid: 111_111,
+      timestamp: 0,
+    });
+    const liveHolderAContent = JSON.stringify({
+      pid: 222_222,
+      timestamp: 5_000_000,
+    });
+    await writeFile(lockPath, originalStaleContent, "utf-8");
+
+    let releaseCallerCGate!: () => void;
+    const callerCGate = new Promise<void>((resolve) => {
+      releaseCallerCGate = resolve;
+    });
+    let callerCAcquired = false;
+    let callerCPromise!: ReturnType<typeof withLock<string>>;
+
+    claimRenameHooks.before = async () => {
+      await writeFile(lockPath, liveHolderAContent, "utf-8");
+    };
+    claimRenameHooks.after = async () => {
+      callerCPromise = withLock(
+        lockPath,
+        async () => {
+          callerCAcquired = true;
+          await callerCGate;
+          return "caller-c-result";
+        },
+        { staleMs: 0 },
+      );
+      await vi.waitFor(() => {
+        if (!callerCAcquired) {
+          throw new Error("caller C has not acquired the lock yet");
+        }
+      });
+    };
+
+    const stragglerResult = await withLock(
+      lockPath,
+      () => Promise.resolve("straggler-should-not-run"),
+      { staleMs: 0 },
+    );
+
+    expect(stragglerResult).toBe(LOCK_BUSY);
+    expect(callerCAcquired).toBe(true);
+
+    const lockContentAfterRestoreAttempt = await readFile(lockPath, "utf-8");
+    expect(lockContentAfterRestoreAttempt).not.toBe(liveHolderAContent);
+    expect(JSON.parse(lockContentAfterRestoreAttempt)).toMatchObject({
+      pid: process.pid,
+    });
+
+    releaseCallerCGate();
+    await expect(callerCPromise).resolves.toBe("caller-c-result");
   });
 
   it("writes a payload containing the current pid and the injected now() timestamp", async () => {

@@ -119,10 +119,12 @@ let breakAttemptSequence = 0;
  * The stale lockfile is claimed by renaming it aside, which is atomic: exactly one concurrent
  * caller can move a given path, so only one caller ever proceeds past this point for the same
  * stale lock. The claimed content is then re-checked against `staleContent`; a mismatch means a
- * live holder recreated the lockfile in the gap between judging it stale and claiming it, so the
- * claimed file is restored to `lockPath` on a best-effort basis and acquisition is abandoned.
- * Only when the claimed content matches the judged-stale content does this recreate `lockPath`
- * with the caller's own payload and discard the stale copy.
+ * live holder recreated the lockfile in the gap between judging it stale and claiming it, so this
+ * attempts to restore the claimed content to `lockPath` with a non-clobbering exclusive-create
+ * write: if a different caller has since acquired `lockPath`, that write fails and is discarded
+ * rather than overwriting the newer holder's lock. Only when the claimed content matches the
+ * judged-stale content does this recreate `lockPath` with the caller's own payload and discard the
+ * stale copy.
  *
  * @param lockPath - Absolute path to the lockfile being broken
  * @param staleContent - The exact bytes read from `lockPath` and judged stale
@@ -147,7 +149,14 @@ async function breakStaleLockAndAcquire(
 
   const claimedContent = await readFile(asidePath, "utf-8");
   if (claimedContent !== staleContent) {
-    await rename(asidePath, lockPath).catch(() => undefined);
+    try {
+      await writeFile(lockPath, claimedContent, { flag: "wx" });
+    } catch (error) {
+      if (!isErrnoException(error) || error.code !== "EEXIST") {
+        throw error;
+      }
+    }
+    await rm(asidePath, { force: true });
     return false;
   }
 
@@ -174,10 +183,20 @@ async function breakStaleLockAndAcquire(
  * the aside copy discarded. This atomicity means that when multiple callers race to break the same
  * stale lock, at most one of them claims it and goes on to acquire and run `action` — the others
  * either see their rename fail (someone else already claimed it) or, if a live holder recreated the
- * lockfile in the gap, restore what they claimed and back off, never destroying a live holder's
- * lock. A fresh, live lockfile causes `withLock` to return {@link LOCK_BUSY} immediately without
- * invoking `action`. Once acquired, the lockfile is always removed in a `finally` block, so a
- * throwing `action` still releases the lock before its error propagates to the caller.
+ * lockfile in the gap, attempt a non-clobbering restore of what they claimed and back off, never
+ * overwriting a lock they did not create. A fresh, live lockfile causes `withLock` to return
+ * {@link LOCK_BUSY} immediately without invoking `action`. Once acquired, the lockfile is always
+ * removed in a `finally` block, so a throwing `action` still releases the lock before its error
+ * propagates to the caller.
+ *
+ * @remarks
+ * Stale-lock breaking cannot be made perfectly atomic on POSIX with only `rename` and `unlink` as
+ * primitives. The design here serializes concurrent breakers through an atomic rename-claim and
+ * never overwrites a lockfile it did not itself create, but it still depends on `staleMs` being
+ * set far larger than any `action`'s expected duration, so that a live holder's lock is never
+ * judged stale in the first place. A pathological interleave in which a live holder's lock is
+ * judged stale — which requires `action` to run longer than `staleMs` — is outside this design's
+ * intended operating envelope.
  *
  * @param lockPath - Absolute path to the lockfile to create and remove
  * @param action - The work to perform while holding the lock

@@ -5,6 +5,7 @@ import {
   cloneAtSha,
   GitOperationError,
   lsRemote,
+  normalizeExecFileOutcome,
   withTempClone,
   type GitRunner,
 } from "../../src/resolver/git.js";
@@ -111,6 +112,58 @@ describe("cloneAtSha", () => {
     await expect(
       cloneAtSha(repoUrl, sha, "/tmp/das-dest", runner),
     ).rejects.toThrow(GitOperationError);
+  });
+
+  it.each([
+    ["a dash-leading sha", "-a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b"],
+    ["a short sha", "a1b2c3"],
+    ["an uppercase sha", "A1B2C3D4E5F6A1B2C3D4E5F6A1B2C3D4E5F6A1B2"],
+  ])(
+    "throws GitOperationError for %s without invoking the runner",
+    async (_label, malformedSha) => {
+      const calls: string[][] = [];
+      const runner: GitRunner = (args) => {
+        calls.push(args);
+        return Promise.resolve({ exitCode: 0, stdout: "" });
+      };
+
+      await expect(
+        cloneAtSha(repoUrl, malformedSha, "/tmp/das-dest", runner),
+      ).rejects.toThrow(GitOperationError);
+
+      expect(calls).toHaveLength(0);
+    },
+  );
+});
+
+describe("normalizeExecFileOutcome", () => {
+  it("returns a zero exit code result when there is no error", () => {
+    expect(normalizeExecFileOutcome(null, "output")).toEqual({
+      stdout: "output",
+      exitCode: 0,
+    });
+  });
+
+  it("returns the numeric exit code when git ran and exited nonzero", () => {
+    const execError = Object.assign(new Error("Command failed"), {
+      code: 128,
+    });
+
+    expect(normalizeExecFileOutcome(execError, "")).toEqual({
+      stdout: "",
+      exitCode: 128,
+    });
+  });
+
+  it("wraps a non-numeric failure (timeout, spawn failure) as GitOperationError", () => {
+    const timeoutError = Object.assign(new Error("Timed out"), {
+      code: "ETIMEDOUT",
+      killed: true,
+    });
+
+    expect(() => normalizeExecFileOutcome(timeoutError, "")).toThrow(
+      GitOperationError,
+    );
   });
 });
 

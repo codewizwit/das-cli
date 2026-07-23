@@ -1,3 +1,4 @@
+import type { ExecFileException } from "node:child_process";
 import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5,6 +6,7 @@ import { join } from "node:path";
 
 const defaultTimeoutMs = 120000;
 const shaLinePattern = /^[0-9a-f]{40}(?=\s)/;
+const shaFormatPattern = /^[0-9a-f]{40}$/;
 
 /**
  * Executes a git argument vector and reports its stdout and exit code.
@@ -24,8 +26,8 @@ export type GitRunner = (
 
 /** Thrown when a git subprocess exits nonzero or produces output that cannot be parsed. */
 export class GitOperationError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = "GitOperationError";
   }
 }
@@ -54,6 +56,38 @@ export function buildGitEnv(): Record<string, string> {
   };
 }
 
+/**
+ * Convert an `execFile` callback's error and stdout into a runner result.
+ *
+ * A `null` error or an error carrying a numeric `.code` both mean git actually ran to completion
+ * (with exit code 0 or that nonzero code, respectively). Every other failure, such as a spawn
+ * error or a timeout kill, means git never produced an exit code at all, so it is normalized into
+ * a {@link GitOperationError} instead of leaking a raw `Error`: callers that catch
+ * `GitOperationError` to treat a source as stale or offline must see every git failure mode, not
+ * just nonzero exits.
+ *
+ * @param error - The error `execFile` passed to its callback, or null on a clean exit
+ * @param stdout - The captured stdout
+ * @returns The runner result once git has actually run and exited
+ * @throws {@link GitOperationError} When `execFile` could not run git to completion at all
+ */
+export function normalizeExecFileOutcome(
+  error: ExecFileException | null,
+  stdout: string,
+): { stdout: string; exitCode: number } {
+  if (error === null) {
+    return { stdout, exitCode: 0 };
+  }
+
+  if (typeof error.code === "number") {
+    return { stdout, exitCode: error.code };
+  }
+
+  throw new GitOperationError(`git process failed: ${error.message}`, {
+    cause: error,
+  });
+}
+
 const defaultGitRunner: GitRunner = (args, options) =>
   new Promise((resolve, reject) => {
     execFile(
@@ -61,17 +95,15 @@ const defaultGitRunner: GitRunner = (args, options) =>
       args,
       { env: options.env, timeout: options.timeoutMs },
       (error, stdout) => {
-        if (error === null) {
-          resolve({ stdout, exitCode: 0 });
-          return;
+        try {
+          resolve(normalizeExecFileOutcome(error, stdout));
+        } catch (thrownError) {
+          reject(
+            thrownError instanceof Error
+              ? thrownError
+              : new Error(String(thrownError)),
+          );
         }
-
-        if (typeof error.code === "number") {
-          resolve({ stdout, exitCode: error.code });
-          return;
-        }
-
-        reject(new Error(error.message, { cause: error }));
       },
     );
   });
@@ -126,7 +158,8 @@ export async function lsRemote(
  * @param sha - The exact commit sha to check out
  * @param destination - The local directory to clone into; must not already exist
  * @param runner - The git process runner; defaults to a hardened `execFile`-based runner
- * @throws {@link GitOperationError} When any of the clone, fetch, or checkout steps exits nonzero
+ * @throws {@link GitOperationError} When `sha` is not a 40-character lowercase hex string, or when
+ * any of the clone, fetch, or checkout steps exits nonzero
  */
 export async function cloneAtSha(
   url: string,
@@ -134,6 +167,12 @@ export async function cloneAtSha(
   destination: string,
   runner: GitRunner = defaultGitRunner,
 ): Promise<void> {
+  if (!shaFormatPattern.test(sha)) {
+    throw new GitOperationError(
+      `Refusing to check out malformed sha: "${sha}". Expected a 40-character lowercase hex string.`,
+    );
+  }
+
   const env = buildGitEnv();
   const runOptions = { env, timeoutMs: defaultTimeoutMs };
 

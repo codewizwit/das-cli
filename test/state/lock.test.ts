@@ -1,4 +1,11 @@
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -75,15 +82,33 @@ describe("withLock", () => {
     await expect(fileExists(lockPath)).resolves.toBe(false);
   });
 
-  it("treats a corrupt, non-JSON lockfile as stale and acquires it", async () => {
-    await writeFile(lockPath, "not json{", "utf-8");
+  it("does not break a recently-created empty lockfile and returns LOCK_BUSY, without deleting it", async () => {
+    await writeFile(lockPath, "", "utf-8");
+    const action = vi.fn(() => Promise.resolve("should not run"));
 
-    const result = await withLock(lockPath, () => Promise.resolve("acquired"));
+    const result = await withLock(lockPath, action, { staleMs: 600_000 });
+
+    expect(result).toBe(LOCK_BUSY);
+    expect(action).not.toHaveBeenCalled();
+    await expect(fileExists(lockPath)).resolves.toBe(true);
+  });
+
+  it("breaks an old, corrupt lockfile once its mtime exceeds staleMs, and acquires it", async () => {
+    await writeFile(lockPath, "not json{", "utf-8");
+    const oldMtime = new Date(Date.now() - 700_000);
+    await utimes(lockPath, oldMtime, oldMtime);
+
+    const result = await withLock(lockPath, () => Promise.resolve("acquired"), {
+      staleMs: 600_000,
+    });
 
     expect(result).toBe("acquired");
     await expect(fileExists(lockPath)).resolves.toBe(false);
   });
 
+  // Covers the fully-written-lock case (a live holder whose payload was already flushed to disk).
+  // The mid-write race where the file exists but is still empty is covered by the
+  // "recently-created empty lockfile" test above.
   it("serializes two concurrent calls on the same path: exactly one runs the action", async () => {
     let releaseGate!: () => void;
     const gate = new Promise<void>((resolve) => {

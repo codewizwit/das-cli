@@ -1,4 +1,4 @@
-import { open, readFile, rm } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 
 /** Sentinel returned by {@link withLock} when the lock is already held by a live holder. */
 export const LOCK_BUSY = Symbol("LOCK_BUSY");
@@ -61,11 +61,29 @@ async function isLockStale(
   }
 
   const payload = parseLockPayload(raw);
-  if (!payload) {
-    return true;
+  if (payload) {
+    return now() - payload.timestamp >= staleMs;
   }
 
-  return now() - payload.timestamp > staleMs;
+  return isLockFileAgeStale(lockPath, staleMs, now);
+}
+
+async function isLockFileAgeStale(
+  lockPath: string,
+  staleMs: number,
+  now: () => number,
+): Promise<boolean> {
+  let stats;
+  try {
+    stats = await stat(lockPath);
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      return true;
+    }
+    throw error;
+  }
+
+  return now() - stats.mtimeMs >= staleMs;
 }
 
 async function tryAcquire(
@@ -74,20 +92,13 @@ async function tryAcquire(
 ): Promise<boolean> {
   const payload: LockPayload = { pid: process.pid, timestamp: now() };
 
-  let handle;
   try {
-    handle = await open(lockPath, "wx");
+    await writeFile(lockPath, JSON.stringify(payload), { flag: "wx" });
   } catch (error) {
     if (isErrnoException(error) && error.code === "EEXIST") {
       return false;
     }
     throw error;
-  }
-
-  try {
-    await handle.writeFile(JSON.stringify(payload));
-  } finally {
-    await handle.close();
   }
 
   return true;
@@ -97,13 +108,19 @@ async function tryAcquire(
  * Run `action` while holding an advisory, cross-process lockfile, so concurrent das processes
  * never co-write the same manifest or skill.
  *
- * The lock is acquired with an exclusive-create (`O_EXCL`) open of `lockPath`, which is atomic
- * across processes on the same filesystem. If the lockfile already exists, its payload is read to
- * decide whether the holder is still alive: a payload older than `staleMs`, or one that cannot be
- * parsed at all, is treated as abandoned, the lockfile is removed, and acquisition is retried
- * exactly once. A fresh, live lockfile causes `withLock` to return {@link LOCK_BUSY} immediately
- * without invoking `action`. Once acquired, the lockfile is always removed in a `finally` block,
- * so a throwing `action` still releases the lock before its error propagates to the caller.
+ * The lock is acquired with a single exclusive-create (`O_EXCL`) write of `lockPath` containing
+ * the holder's payload, which is atomic across processes on the same filesystem: there is no
+ * window where the file exists but is still empty. If the lockfile already exists, its payload is
+ * read to decide whether the holder is still alive. A payload that parses is stale once
+ * `now() - payload.timestamp >= staleMs`. A payload that cannot be parsed — including a file
+ * still mid-write by another process — is judged by the lockfile's own mtime instead, and is only
+ * treated as abandoned once `now() - mtimeMs >= staleMs`; this keeps a just-created or mid-write
+ * lockfile from being broken out from under its holder while still letting a genuinely orphaned
+ * corrupt lockfile self-heal once it ages past `staleMs`. Once a lockfile is judged stale, it is
+ * removed and acquisition is retried exactly once. A fresh, live lockfile causes `withLock` to
+ * return {@link LOCK_BUSY} immediately without invoking `action`. Once acquired, the lockfile is
+ * always removed in a `finally` block, so a throwing `action` still releases the lock before its
+ * error propagates to the caller.
  *
  * @param lockPath - Absolute path to the lockfile to create and remove
  * @param action - The work to perform while holding the lock

@@ -94,7 +94,7 @@ Normalizes any source into an ordered fileset. Extensions: `.md`, `.mdx`, `.mark
 
 Clone hardening (all mandatory): `GIT_TERMINAL_PROMPT=0`, empty `GIT_ASKPASS`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_LFS_SKIP_SMUDGE=1`, `-c protocol.ext.allow=never -c protocol.file.allow=never -c core.symlinks=false`, no submodule recursion, `--` before the URL, `--depth 1 --filter=blob:none` at the pinned SHA. Caps: 120s clone timeout, 100MB total, 5000 files. Sources are spawned as argument vectors, never through a shell.
 
-Symlinks are never followed: the resolver `lstat`s and skips symlinked files and directories.
+Symlinks are never followed: the resolver `lstat`s and skips symlinked files and directories, and a source path that is itself a symlink is rejected with a clear error naming the resolved target to pass instead.
 
 Frontmatter and MDX handling:
 

@@ -10,6 +10,14 @@ export interface PlannedFile {
   node: DocNode;
   /** How this file participates in the skill's structure. */
   role: "skill" | "index" | "leaf" | "group";
+  /**
+   * Ordered relativePaths this file links to in its table of contents.
+   *
+   * For "skill", "index", and "group" roles, these are the group paths when
+   * the children were grouped, otherwise the direct child paths, in
+   * document order. Always empty for "leaf".
+   */
+  childPaths: string[];
 }
 
 /** The complete structural plan for emitting a documentation tree as a skill. */
@@ -18,6 +26,13 @@ export interface EmissionPlan {
   files: PlannedFile[];
   /** Relative paths of leaves that exceed the token budget and were emitted whole. */
   oversized: string[];
+  /**
+   * Relative paths of index/group/skill files whose table of contents
+   * cannot fit the budget because one of their entries is an irreducible
+   * link line (for example an unshrinkable heading name) that grouping
+   * cannot reduce any further.
+   */
+  oversizedIndexes: string[];
 }
 
 interface TocEntry {
@@ -82,10 +97,11 @@ function planNode(
   budget: number,
   files: PlannedFile[],
   oversized: string[],
+  oversizedIndexes: string[],
 ): void {
   if (!recurses) {
     const relativePath = `${parentDir}/${slug}.md`;
-    files.push({ relativePath, node, role: "leaf" });
+    files.push({ relativePath, node, role: "leaf", childPaths: [] });
     if (node.subtreeTokens > budget) {
       oversized.push(relativePath);
     }
@@ -101,6 +117,7 @@ function planNode(
     budget,
     files,
     oversized,
+    oversizedIndexes,
   );
 }
 
@@ -109,6 +126,7 @@ function toPlacementItem(
   budget: number,
   files: PlannedFile[],
   oversized: string[],
+  oversizedIndexes: string[],
 ): PlacementItem {
   return {
     name: descriptor.name,
@@ -122,6 +140,7 @@ function toPlacementItem(
         budget,
         files,
         oversized,
+        oversizedIndexes,
       );
     },
   };
@@ -156,7 +175,9 @@ function partitionByTocBudget(
 function buildGroupItem(
   bucket: PlacementItem[],
   index: number,
+  budget: number,
   files: PlannedFile[],
+  oversizedIndexes: string[],
 ): PlacementItem {
   const groupSlug = `group-${String(index + 1)}`;
   const firstItem = bucket[0];
@@ -165,23 +186,30 @@ function buildGroupItem(
   const lastName = lastItem?.name ?? groupSlug;
   const label =
     firstName === lastName ? firstName : `${firstName} – ${lastName}`;
+  const bucketFits = estimateTokens(renderToc(bucket)) <= budget;
 
   return {
     name: label,
     linkPath: `${groupSlug}/index.md`,
     place: (dir: string) => {
       const groupDir = `${dir}/${groupSlug}`;
+      const groupRelativePath = `${groupDir}/index.md`;
       const groupNode: DocNode = {
         name: label,
         body: "",
         children: [],
         subtreeTokens: 0,
       };
+      const childPaths = bucket.map((item) => `${groupDir}/${item.linkPath}`);
       files.push({
-        relativePath: `${groupDir}/index.md`,
+        relativePath: groupRelativePath,
         node: groupNode,
         role: "group",
+        childPaths,
       });
+      if (!bucketFits) {
+        oversizedIndexes.push(groupRelativePath);
+      }
       for (const bucketItem of bucket) {
         bucketItem.place(groupDir);
       }
@@ -189,21 +217,37 @@ function buildGroupItem(
   };
 }
 
+/**
+ * Reduce a list of table-of-contents entries to one that fits the budget.
+ *
+ * Recursively partitions entries into budget-sized "group" files, wrapping
+ * the resulting group links and re-checking them the same way, until the
+ * top-level list fits. If a partitioning pass fails to reduce the entry
+ * count (every entry is already alone in its own bucket, meaning at least
+ * one entry's own rendered line cannot fit the budget and grouping cannot
+ * help), the list is returned as-is: the caller is responsible for flagging
+ * the file that ends up listing it in `oversizedIndexes`.
+ */
 function resolveGroupedPlacement(
   items: PlacementItem[],
   budget: number,
   files: PlannedFile[],
+  oversizedIndexes: string[],
 ): PlacementItem[] {
-  if (items.length <= 1 || estimateTokens(renderToc(items)) <= budget) {
+  if (estimateTokens(renderToc(items)) <= budget) {
     return items;
   }
 
   const buckets = partitionByTocBudget(items, budget);
+  if (buckets.length >= items.length) {
+    return items;
+  }
+
   const groupItems = buckets.map((bucket, index) =>
-    buildGroupItem(bucket, index, files),
+    buildGroupItem(bucket, index, budget, files, oversizedIndexes),
   );
 
-  return resolveGroupedPlacement(groupItems, budget, files);
+  return resolveGroupedPlacement(groupItems, budget, files, oversizedIndexes);
 }
 
 function planIndexInto(
@@ -214,14 +258,26 @@ function planIndexInto(
   budget: number,
   files: PlannedFile[],
   oversized: string[],
+  oversizedIndexes: string[],
 ): void {
   const childDescriptors = describeChildren(node.children, budget);
-  const rawTocTokens = estimateTokens(renderToc(childDescriptors));
+  const childItems = childDescriptors.map((descriptor) =>
+    toPlacementItem(descriptor, budget, files, oversized, oversizedIndexes),
+  );
+  const groupedChildItems = resolveGroupedPlacement(
+    childItems,
+    budget,
+    files,
+    oversizedIndexes,
+  );
+
   const bodyTokens = estimateTokens(node.body);
-  const needsOverview = node.body !== "" && bodyTokens + rawTocTokens > budget;
+  const renderedChildTocTokens = estimateTokens(renderToc(groupedChildItems));
+  const needsOverview =
+    node.body !== "" && bodyTokens + renderedChildTocTokens > budget;
 
   let indexNode = node;
-  let descriptors = childDescriptors;
+  let topLevelItems = groupedChildItems;
 
   if (needsOverview) {
     const overviewNode: DocNode = {
@@ -230,16 +286,31 @@ function planIndexInto(
       children: [],
       subtreeTokens: bodyTokens,
     };
-    descriptors = describeChildren([overviewNode, ...node.children], budget);
+    const overviewDescriptors = describeChildren(
+      [overviewNode, ...node.children],
+      budget,
+    );
+    const overviewItems = overviewDescriptors.map((descriptor) =>
+      toPlacementItem(descriptor, budget, files, oversized, oversizedIndexes),
+    );
+    topLevelItems = resolveGroupedPlacement(
+      overviewItems,
+      budget,
+      files,
+      oversizedIndexes,
+    );
     indexNode = { ...node, body: "" };
   }
 
-  files.push({ relativePath: ownFilePath, node: indexNode, role });
+  const childPaths = topLevelItems.map((item) => `${ownDir}/${item.linkPath}`);
+  const ownBodyTokens = indexNode.body === "" ? 0 : bodyTokens;
+  const ownFits =
+    ownBodyTokens + estimateTokens(renderToc(topLevelItems)) <= budget;
 
-  const items = descriptors.map((descriptor) =>
-    toPlacementItem(descriptor, budget, files, oversized),
-  );
-  const topLevelItems = resolveGroupedPlacement(items, budget, files);
+  files.push({ relativePath: ownFilePath, node: indexNode, role, childPaths });
+  if (!ownFits) {
+    oversizedIndexes.push(ownFilePath);
+  }
 
   for (const item of topLevelItems) {
     item.place(ownDir);
@@ -252,12 +323,16 @@ function planIndexInto(
  * The root always becomes `SKILL.md`. When a node's subtree fits the token
  * budget, it is emitted whole as a single leaf (its children are not emitted
  * separately). When it does not fit, the node becomes an index whose
- * table of contents links to its children, recursing into each. If an
- * index's own body plus its table of contents would not fit, the body is
- * relocated to a separate "Overview" leaf placed first. If a table of
- * contents itself would not fit, its entries are partitioned in document
- * order into budget-sized "group" index files, applied recursively until
- * every emitted table of contents fits. A childless node whose own body
+ * table of contents links to its children, recursing into each. The
+ * decision to relocate the body to a separate "Overview" leaf is based on
+ * the actual rendered table of contents after grouping is resolved, not the
+ * raw, pre-grouping child list. If a table of contents itself would not
+ * fit, its entries are partitioned in document order into budget-sized
+ * "group" index files, applied recursively until every emitted table of
+ * contents fits. When an entry's own rendered link line cannot fit the
+ * budget on its own, grouping cannot help further: the entry is placed
+ * as-is and the enclosing file is flagged in `oversizedIndexes` instead of
+ * looping forever or overflowing silently. A childless node whose own body
  * exceeds the budget is emitted whole and flagged in `oversized`.
  *
  * @param root - The sized root of the documentation tree to plan
@@ -271,13 +346,19 @@ export function planEmission(
   const { tokenBudget } = options;
   const files: PlannedFile[] = [];
   const oversized: string[] = [];
+  const oversizedIndexes: string[] = [];
 
   if (root.subtreeTokens <= tokenBudget || root.children.length === 0) {
-    files.push({ relativePath: "SKILL.md", node: root, role: "skill" });
+    files.push({
+      relativePath: "SKILL.md",
+      node: root,
+      role: "skill",
+      childPaths: [],
+    });
     if (root.subtreeTokens > tokenBudget) {
       oversized.push("SKILL.md");
     }
-    return { files, oversized };
+    return { files, oversized, oversizedIndexes };
   }
 
   planIndexInto(
@@ -288,7 +369,8 @@ export function planEmission(
     tokenBudget,
     files,
     oversized,
+    oversizedIndexes,
   );
 
-  return { files, oversized };
+  return { files, oversized, oversizedIndexes };
 }

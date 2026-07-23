@@ -34,10 +34,14 @@ export function numericPrefix(fileName: string): number | undefined {
   return Number(match[1]);
 }
 
-function compareCaseFolded(a: string, b: string): number {
-  return a
+function compareCaseFolded(firstValue: string, secondValue: string): number {
+  return firstValue
     .toLowerCase()
-    .localeCompare(b.toLowerCase(), "en", { numeric: false });
+    .localeCompare(secondValue.toLowerCase(), "en", { numeric: false });
+}
+
+function asFiniteOrUndefined(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) ? value : undefined;
 }
 
 /**
@@ -51,18 +55,21 @@ function compareCaseFolded(a: string, b: string): number {
  * @returns A negative number if `a` sorts before `b`, positive if after, zero if equal
  */
 export function compareDocOrder(a: OrderKey, b: OrderKey): number {
-  if (a.sidebarPosition !== undefined && b.sidebarPosition !== undefined) {
-    if (a.sidebarPosition !== b.sidebarPosition) {
-      return a.sidebarPosition - b.sidebarPosition;
+  const aPosition = asFiniteOrUndefined(a.sidebarPosition);
+  const bPosition = asFiniteOrUndefined(b.sidebarPosition);
+
+  if (aPosition !== undefined && bPosition !== undefined) {
+    if (aPosition !== bPosition) {
+      return aPosition - bPosition;
     }
-  } else if (a.sidebarPosition !== undefined) {
+  } else if (aPosition !== undefined) {
     return -1;
-  } else if (b.sidebarPosition !== undefined) {
+  } else if (bPosition !== undefined) {
     return 1;
   }
 
-  const aPrefix = numericPrefix(a.fileName);
-  const bPrefix = numericPrefix(b.fileName);
+  const aPrefix = asFiniteOrUndefined(numericPrefix(a.fileName));
+  const bPrefix = asFiniteOrUndefined(numericPrefix(b.fileName));
 
   if (aPrefix !== undefined && bPrefix !== undefined) {
     if (aPrefix !== bPrefix) {

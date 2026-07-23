@@ -25,6 +25,10 @@ describe("numericPrefix", () => {
   it("returns undefined when the filename has no leading number", () => {
     expect(numericPrefix("intro.md")).toBeUndefined();
   });
+
+  it("reads a leading zero as 0, not as absent", () => {
+    expect(numericPrefix("0-intro.md")).toBe(0);
+  });
 });
 
 describe("compareDocOrder", () => {
@@ -118,6 +122,79 @@ describe("compareDocOrder", () => {
     };
 
     expect(compareDocOrder(first, second)).toBe(0);
+  });
+
+  it("treats a NaN sidebarPosition as absent, same as undefined", () => {
+    const nanPositioned: OrderKey = {
+      sidebarPosition: NaN,
+      fileName: "z.md",
+      relativePath: "z.md",
+    };
+    const positioned: OrderKey = {
+      sidebarPosition: 1,
+      fileName: "a.md",
+      relativePath: "a.md",
+    };
+
+    expect(compareDocOrder(positioned, nanPositioned)).toBeLessThan(0);
+    expect(compareDocOrder(nanPositioned, positioned)).toBeGreaterThan(0);
+  });
+
+  it("falls through to later keys when both sidebarPositions are NaN, returning a finite result", () => {
+    const first: OrderKey = {
+      sidebarPosition: NaN,
+      fileName: "a.md",
+      relativePath: "a.md",
+    };
+    const second: OrderKey = {
+      sidebarPosition: NaN,
+      fileName: "b.md",
+      relativePath: "b.md",
+    };
+
+    expect(Number.isFinite(compareDocOrder(first, second))).toBe(true);
+    expect(compareDocOrder(first, second)).toBeLessThan(0);
+  });
+
+  it("treats a zero sidebarPosition as present, sorting before an unpositioned entry", () => {
+    const zeroPositioned: OrderKey = {
+      sidebarPosition: 0,
+      fileName: "z.md",
+      relativePath: "z.md",
+    };
+    const unpositioned: OrderKey = {
+      fileName: "a.md",
+      relativePath: "a.md",
+    };
+
+    expect(compareDocOrder(zeroPositioned, unpositioned)).toBeLessThan(0);
+  });
+
+  it("orders numeric filename prefixes by value, not lexically", () => {
+    const nine: OrderKey = { fileName: "9-x.md", relativePath: "9-x.md" };
+    const ten: OrderKey = { fileName: "10-x.md", relativePath: "10-x.md" };
+
+    expect(compareDocOrder(nine, ten)).toBeLessThan(0);
+  });
+
+  it("orders three entries with positioned, prefix-only, and neither keys transitively", () => {
+    const positioned: OrderKey = {
+      sidebarPosition: 1,
+      fileName: "z.md",
+      relativePath: "z.md",
+    };
+    const prefixOnly: OrderKey = {
+      fileName: "01-intro.md",
+      relativePath: "01-intro.md",
+    };
+    const neither: OrderKey = {
+      fileName: "readme.md",
+      relativePath: "readme.md",
+    };
+
+    const sorted = [neither, prefixOnly, positioned].sort(compareDocOrder);
+
+    expect(sorted).toEqual([positioned, prefixOnly, neither]);
   });
 
   it("orders folders using the same keys with no special casing", () => {

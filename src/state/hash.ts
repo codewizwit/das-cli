@@ -23,9 +23,11 @@ function appendLengthPrefixedField(
  * Compute a deterministic, order-independent digest of a documentation fileset and its
  * generation parameters.
  *
- * Files are sorted by relative path before hashing, so the same set in any order yields the
- * same digest. Every field is length-prefixed before being fed to the hash, so no combination
- * of path and content bytes can collide with a different combination across a field boundary.
+ * Files with distinct relative paths are sorted by relative path before hashing, so the same set
+ * in any order yields the same digest; two entries sharing a relative path (a degenerate input the
+ * upstream resolver does not produce) are left in their given order. Every field is length-prefixed
+ * before being fed to the hash, using its UTF-8 byte length, so no combination of path and content
+ * bytes can collide with a different combination across a field boundary.
  * The digest changes whenever any file's path or content changes, or when any generation
  * parameter changes, which is what lets refresh skip regeneration only when nothing that affects
  * the output has changed.

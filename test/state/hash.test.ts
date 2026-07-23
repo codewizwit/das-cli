@@ -77,6 +77,26 @@ describe("hashFileset", () => {
     expect(first).not.toBe(second);
   });
 
+  it("resists field-boundary collisions across multibyte characters", () => {
+    const first = hashFileset([docFile("x", "😀😀")], defaultParams);
+    const second = hashFileset([docFile("x😀", "😀")], defaultParams);
+
+    expect(first).not.toBe(second);
+  });
+
+  it("does not let a param value collide with a same-looking filename", () => {
+    const withFileNamed4000 = hashFileset([docFile("4000", "body")], {
+      ...defaultParams,
+      tokenBudget: 1,
+    });
+    const withBudget4000 = hashFileset([docFile("1", "body")], {
+      ...defaultParams,
+      tokenBudget: 4000,
+    });
+
+    expect(withFileNamed4000).not.toBe(withBudget4000);
+  });
+
   it("does not mutate the input array order", () => {
     const files = [docFile("b.md", "two"), docFile("a.md", "one")];
 

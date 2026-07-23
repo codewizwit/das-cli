@@ -45,4 +45,31 @@ describe("firstSummary", () => {
       "This paragraph continues onto a second line.",
     );
   });
+
+  it("hard-cuts at exactly 120 characters when no space exists to cut on", () => {
+    const body = "x".repeat(500);
+
+    const result = firstSummary(body);
+    expect(result).toBe("x".repeat(120));
+    expect(result).toHaveLength(120);
+  });
+
+  it("never returns more than 120 characters even with a late space", () => {
+    const body = `${"c".repeat(200)} short tail.`;
+
+    expect(firstSummary(body).length).toBeLessThanOrEqual(120);
+  });
+
+  it("treats a blank line inside a fenced code block as still fenced", () => {
+    const body = "```\nfunction foo() {\n\n  return 1;\n}\n```";
+
+    expect(firstSummary(body)).toBe("");
+  });
+
+  it("finds prose after a fence that contains an internal blank line", () => {
+    const body =
+      "```\nfunction foo() {\n\n  return 1;\n}\n```\n\nThis is real prose after the fence.";
+
+    expect(firstSummary(body)).toBe("This is real prose after the fence.");
+  });
 });

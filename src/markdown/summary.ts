@@ -5,7 +5,6 @@ const unorderedListPattern = /^[-*+]\s/;
 function isNonProseLine(trimmedLine: string): boolean {
   return (
     headingPattern.test(trimmedLine) ||
-    trimmedLine.startsWith("```") ||
     trimmedLine.startsWith("|") ||
     trimmedLine.startsWith(">") ||
     unorderedListPattern.test(trimmedLine) ||
@@ -17,6 +16,7 @@ function findFirstProseParagraph(body: string): string | undefined {
   const lines = body.split("\n");
   let paragraphLines: string[] = [];
   let paragraphIsProse = true;
+  let insideFence = false;
 
   const flushParagraph = (): string | undefined => {
     if (paragraphLines.length > 0 && paragraphIsProse) {
@@ -28,6 +28,13 @@ function findFirstProseParagraph(body: string): string | undefined {
   for (const line of lines) {
     const trimmedLine = line.trim();
 
+    if (insideFence) {
+      if (trimmedLine.startsWith("```")) {
+        insideFence = false;
+      }
+      continue;
+    }
+
     if (trimmedLine === "") {
       const paragraph = flushParagraph();
       if (paragraph !== undefined) {
@@ -35,6 +42,15 @@ function findFirstProseParagraph(body: string): string | undefined {
       }
       paragraphLines = [];
       paragraphIsProse = true;
+      continue;
+    }
+
+    if (trimmedLine.startsWith("```")) {
+      insideFence = true;
+      if (paragraphLines.length === 0) {
+        paragraphIsProse = false;
+      }
+      paragraphLines.push(trimmedLine);
       continue;
     }
 
@@ -54,7 +70,7 @@ function truncateAtWordBoundary(text: string, maxLength: number): string {
   }
 
   const cutIndex = text.lastIndexOf(" ", maxLength);
-  return text.slice(0, cutIndex);
+  return cutIndex === -1 ? text.slice(0, maxLength) : text.slice(0, cutIndex);
 }
 
 /**
@@ -70,8 +86,8 @@ function truncateAtWordBoundary(text: string, maxLength: number): string {
  *
  * @remarks
  * Known limitations:
- * - If the first 120 characters contain no space, the cut falls back to
- *   the character before index 120 rather than the whole first word
+ * - If no space exists at or before index 120, the cut hard-cuts at
+ *   exactly 120 characters, splitting the word at that boundary
  *
  * @example
  * ```ts

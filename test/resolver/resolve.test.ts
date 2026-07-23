@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { UnsupportedSourceError } from "../../src/resolver/github-url.js";
 import type { GitRunner } from "../../src/resolver/git.js";
 import {
+  defaultMaxFileCount,
+  defaultMaxTotalContentBytes,
   resolveSource,
   SourceTooLargeError,
 } from "../../src/resolver/resolve.js";
@@ -13,8 +15,6 @@ import type { SourceRef } from "../../src/types.js";
 const repoUrl = "https://github.com/octocat/hello-world.git";
 const pinnedSha = "1111111111111111111111111111111111111111";
 const headSha = "2222222222222222222222222222222222222222";
-const maxFileCount = 5000;
-const maxTotalContentBytes = 100 * 1024 * 1024;
 
 interface MockGitRunnerFixtures {
   headSha?: string;
@@ -57,6 +57,23 @@ function createMockGitRunner(fixtures: MockGitRunnerFixtures = {}): {
   return { runner, calls, clonedDestinations };
 }
 
+async function writeFlatMarkdownFiles(
+  directoryPath: string,
+  count: number,
+  bytesPerFile: number,
+): Promise<void> {
+  const writes: Promise<void>[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const fileName = `file-${String(index).padStart(5, "0")}.md`;
+    writes.push(
+      writeFile(join(directoryPath, fileName), "a".repeat(bytesPerFile)),
+    );
+  }
+
+  await Promise.all(writes);
+}
+
 describe("resolveSource", () => {
   let fixtureRoot: string;
 
@@ -87,6 +104,20 @@ describe("resolveSource", () => {
           frontmatter: {},
         },
       ]);
+    });
+
+    it("throws SourceTooLargeError when a local fileset exceeds the injected file-count cap", async () => {
+      await writeFlatMarkdownFiles(fixtureRoot, 3, 10);
+
+      const ref: SourceRef = {
+        type: "path",
+        path: fixtureRoot,
+        kind: "folder",
+      };
+
+      await expect(
+        resolveSource(ref, { includeLarge: false, maxFiles: 2 }),
+      ).rejects.toThrow(SourceTooLargeError);
     });
   });
 
@@ -178,24 +209,10 @@ describe("resolveSource", () => {
       ]);
     });
 
-    it("throws SourceTooLargeError when the cloned fileset exceeds the file-count cap", async () => {
+    it("still enforces the injected caps on a cloned fileset", async () => {
       const { runner } = createMockGitRunner({
-        populateClone: async (destinationPath) => {
-          const fileCount = maxFileCount + 1;
-          const writes: Promise<void>[] = [];
-
-          for (let index = 0; index < fileCount; index += 1) {
-            const fileName = `file-${String(index).padStart(5, "0")}.md`;
-            writes.push(
-              writeFile(
-                join(destinationPath, fileName),
-                `Body ${String(index)}`,
-              ),
-            );
-          }
-
-          await Promise.all(writes);
-        },
+        populateClone: (destinationPath) =>
+          writeFlatMarkdownFiles(destinationPath, 3, 10),
       });
 
       const ref: SourceRef = { type: "github", url: repoUrl, subpath: null };
@@ -205,37 +222,19 @@ describe("resolveSource", () => {
           includeLarge: false,
           pinnedSha,
           gitRunner: runner,
+          maxFiles: 2,
         }),
       ).rejects.toThrow(SourceTooLargeError);
     });
 
-    it("throws SourceTooLargeError when the cloned fileset exceeds the content byte cap", async () => {
-      const { runner } = createMockGitRunner({
-        populateClone: (destinationPath) =>
-          writeFile(
-            join(destinationPath, "big.md"),
-            "a".repeat(maxTotalContentBytes + 1),
-          ),
-      });
-
-      const ref: SourceRef = { type: "github", url: repoUrl, subpath: null };
-
-      await expect(
-        resolveSource(ref, {
-          includeLarge: true,
-          pinnedSha,
-          gitRunner: runner,
-        }),
-      ).rejects.toThrow(SourceTooLargeError);
-    });
-
-    it("throws UnsupportedSourceError when the subpath escapes the clone root", async () => {
+    it("throws UnsupportedSourceError with a subpath-specific message when the subpath escapes the clone root", async () => {
       const { runner } = createMockGitRunner();
+      const subpath = "../../etc";
 
       const ref: SourceRef = {
         type: "github",
         url: repoUrl,
-        subpath: "../../etc",
+        subpath,
       };
 
       await expect(
@@ -245,6 +244,24 @@ describe("resolveSource", () => {
           gitRunner: runner,
         }),
       ).rejects.toThrow(UnsupportedSourceError);
+
+      try {
+        await resolveSource(ref, {
+          includeLarge: false,
+          pinnedSha,
+          gitRunner: runner,
+        });
+        throw new Error("expected resolveSource to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(UnsupportedSourceError);
+        expect((error as UnsupportedSourceError).message).toContain(
+          "escapes the repository root",
+        );
+        expect((error as UnsupportedSourceError).message).toContain(subpath);
+        expect((error as UnsupportedSourceError).message).not.toContain(
+          "Supported forms are",
+        );
+      }
     });
 
     it("removes the temp clone directory after resolving", async () => {
@@ -265,6 +282,69 @@ describe("resolveSource", () => {
       const clonedDestination = clonedDestinations[0];
       expect(clonedDestination).toBeDefined();
       await expect(access(clonedDestination ?? "")).rejects.toThrow();
+    });
+  });
+
+  describe("caps", () => {
+    it("exports the real default caps of 5000 files and 100MB", () => {
+      expect(defaultMaxFileCount).toBe(5000);
+      expect(defaultMaxTotalContentBytes).toBe(100 * 1024 * 1024);
+    });
+
+    it("does not throw when file count is exactly at the injected cap", async () => {
+      await writeFlatMarkdownFiles(fixtureRoot, 2, 10);
+
+      const ref: SourceRef = {
+        type: "path",
+        path: fixtureRoot,
+        kind: "folder",
+      };
+
+      await expect(
+        resolveSource(ref, { includeLarge: false, maxFiles: 2 }),
+      ).resolves.toHaveLength(2);
+    });
+
+    it("throws SourceTooLargeError naming the file cap when one over", async () => {
+      await writeFlatMarkdownFiles(fixtureRoot, 3, 10);
+
+      const ref: SourceRef = {
+        type: "path",
+        path: fixtureRoot,
+        kind: "folder",
+      };
+
+      await expect(
+        resolveSource(ref, { includeLarge: false, maxFiles: 2 }),
+      ).rejects.toThrow(/file cap/);
+    });
+
+    it("does not throw when total content bytes are exactly at the injected cap", async () => {
+      await writeFile(join(fixtureRoot, "exact.md"), "a".repeat(10));
+
+      const ref: SourceRef = {
+        type: "path",
+        path: fixtureRoot,
+        kind: "folder",
+      };
+
+      await expect(
+        resolveSource(ref, { includeLarge: false, maxBytes: 10 }),
+      ).resolves.toHaveLength(1);
+    });
+
+    it("throws SourceTooLargeError naming the byte cap when one over", async () => {
+      await writeFile(join(fixtureRoot, "over.md"), "a".repeat(11));
+
+      const ref: SourceRef = {
+        type: "path",
+        path: fixtureRoot,
+        kind: "folder",
+      };
+
+      await expect(
+        resolveSource(ref, { includeLarge: false, maxBytes: 10 }),
+      ).rejects.toThrow(/byte/);
     });
   });
 });

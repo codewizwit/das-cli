@@ -1,5 +1,5 @@
 import type { Stats } from "node:fs";
-import { lstat, readdir, readFile, stat } from "node:fs/promises";
+import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "../markdown/frontmatter.js";
 import { stripMdx } from "../markdown/mdx.js";
@@ -23,6 +23,20 @@ export class EmptyFilesetError extends Error {
     );
     this.name = "EmptyFilesetError";
     this.searchedPaths = searchedPaths;
+  }
+}
+
+/** Thrown when the top-level source path passed to {@link resolveLocal} is itself a symlink. */
+export class SymlinkSourceError extends Error {
+  /** The symlinked path that was rejected. */
+  readonly sourcePath: string;
+
+  constructor(sourcePath: string) {
+    super(
+      `Refusing to resolve a symlinked source path: ${sourcePath}. Pass the resolved target path instead.`,
+    );
+    this.name = "SymlinkSourceError";
+    this.sourcePath = sourcePath;
   }
 }
 
@@ -228,9 +242,9 @@ async function findReadme(
 
 async function resolveSingleFile(
   resolvedSourcePath: string,
+  entryStat: Stats,
   options: ResolveLocalOptions,
 ): Promise<DocFile[]> {
-  const entryStat = await lstat(resolvedSourcePath);
   const relativePath = path.basename(resolvedSourcePath);
   const docFile = await processMarkdownFile(
     resolvedSourcePath,
@@ -292,11 +306,15 @@ async function resolveDirectory(
  * `docs/`, `documentation/`, or `doc/` subfolder is preferred over root-level Markdown when it
  * exists and contains usable Markdown, and the top-level README is always included first when
  * present. Symlinked files and directories are never followed, and `node_modules`, hidden
- * entries, `CHANGELOG.md`, and `LICENSE*` files are excluded.
+ * entries, `CHANGELOG.md`, and `LICENSE*` files are excluded. This rule applies to `sourcePath`
+ * itself as well as to every entry discovered while walking: a symlinked top-level file or
+ * directory is rejected rather than followed, since callers (including manifest-driven refresh)
+ * must not be able to point resolution at a path outside the intended source.
  *
  * @param sourcePath - Path to a Markdown file, docs folder, or project root
  * @param options - Resolution options
  * @returns The ordered, processed fileset
+ * @throws {@link SymlinkSourceError} when `sourcePath` itself is a symlink
  * @throws {@link EmptyFilesetError} when no usable Markdown files remain after resolution
  */
 export async function resolveLocal(
@@ -304,10 +322,14 @@ export async function resolveLocal(
   options: ResolveLocalOptions,
 ): Promise<DocFile[]> {
   const resolvedSourcePath = path.resolve(sourcePath);
-  const sourceStat = await stat(resolvedSourcePath);
+  const sourceLstat = await lstat(resolvedSourcePath);
 
-  if (sourceStat.isFile()) {
-    return resolveSingleFile(resolvedSourcePath, options);
+  if (sourceLstat.isSymbolicLink()) {
+    throw new SymlinkSourceError(resolvedSourcePath);
+  }
+
+  if (sourceLstat.isFile()) {
+    return resolveSingleFile(resolvedSourcePath, sourceLstat, options);
   }
 
   return resolveDirectory(resolvedSourcePath, options);

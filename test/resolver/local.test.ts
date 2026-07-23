@@ -2,7 +2,11 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { EmptyFilesetError, resolveLocal } from "../../src/resolver/local.js";
+import {
+  EmptyFilesetError,
+  resolveLocal,
+  SymlinkSourceError,
+} from "../../src/resolver/local.js";
 
 describe("resolveLocal", () => {
   let fixtureRoot: string;
@@ -204,6 +208,84 @@ describe("resolveLocal", () => {
       expect(emptyFilesetError.searchedPaths).toContain(fixtureRoot);
       expect(emptyFilesetError.message).toContain(fixtureRoot);
     }
+  });
+
+  it("rejects a symlinked top-level file with SymlinkSourceError", async () => {
+    const outsideRoot = await mkdtemp(join(tmpdir(), "das-local-outside-"));
+    const targetPath = join(outsideRoot, "target.md");
+    await writeFile(targetPath, "Target body");
+    const linkPath = join(fixtureRoot, "linked-file.md");
+
+    try {
+      await symlink(targetPath, linkPath, "file");
+    } catch {
+      console.warn(
+        "Skipping symlinked top-level file test: platform forbids symlink creation",
+      );
+      await rm(outsideRoot, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      await resolveLocal(linkPath, { includeLarge: false });
+      throw new Error("expected resolveLocal to throw SymlinkSourceError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SymlinkSourceError);
+      expect((error as SymlinkSourceError).message).toContain(linkPath);
+    }
+
+    await rm(outsideRoot, { recursive: true, force: true });
+  });
+
+  it("rejects a symlinked top-level directory with SymlinkSourceError", async () => {
+    const outsideRoot = await mkdtemp(join(tmpdir(), "das-local-outside-"));
+    const realDirectory = join(outsideRoot, "real-docs-root");
+    await mkdir(realDirectory);
+    await writeFile(join(realDirectory, "intro.md"), "Intro body");
+    const linkedDirectory = join(fixtureRoot, "linked-docs-root");
+
+    try {
+      await symlink(realDirectory, linkedDirectory, "dir");
+    } catch {
+      console.warn(
+        "Skipping symlinked top-level directory test: platform forbids symlink creation",
+      );
+      await rm(outsideRoot, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      await resolveLocal(linkedDirectory, { includeLarge: false });
+      throw new Error("expected resolveLocal to throw SymlinkSourceError");
+    } catch (error) {
+      expect(error).toBeInstanceOf(SymlinkSourceError);
+      expect((error as SymlinkSourceError).message).toContain(linkedDirectory);
+    }
+
+    await rm(outsideRoot, { recursive: true, force: true });
+  });
+
+  it("falls through to documentation/ when docs/ contains only drafts", async () => {
+    await mkdir(join(fixtureRoot, "docs"));
+    await writeFile(
+      join(fixtureRoot, "docs", "draft.md"),
+      "---\ndraft: true\n---\nHidden",
+    );
+    await mkdir(join(fixtureRoot, "documentation"));
+    await writeFile(join(fixtureRoot, "documentation", "real.md"), "Real body");
+
+    const result = await resolveLocal(fixtureRoot, { includeLarge: false });
+
+    expect(result.map((file) => file.relativePath)).toEqual(["real.md"]);
+  });
+
+  it("keeps a file of exactly 1MB without includeLarge", async () => {
+    const exactContent = "a".repeat(1024 * 1024);
+    await writeFile(join(fixtureRoot, "exact.md"), exactContent);
+
+    const result = await resolveLocal(fixtureRoot, { includeLarge: false });
+
+    expect(result.map((file) => file.relativePath)).toEqual(["exact.md"]);
   });
 
   it("orders files by sidebar_position across the fixture, unpositioned entries last", async () => {

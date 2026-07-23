@@ -262,6 +262,132 @@ describe("renderSkillPlan", () => {
     expect(content).not.toContain("#");
   });
 
+  it("inlines every heading when the whole tree fits in one SKILL.md", () => {
+    const grandchild = node("Grandchild", "Grandchild body.");
+    const child = node("Child", "Child body.", [grandchild]);
+    const rootNode = node("Widget", "Root body.", [child]);
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: rootNode,
+        role: "skill",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toContain("Root body.");
+    expect(content).toContain("## Child");
+    expect(content).toContain("Child body.");
+    expect(content).toContain("### Grandchild");
+    expect(content).toContain("Grandchild body.");
+  });
+
+  it("renders links instead of inlining when a skill-role file has a non-empty table of contents", () => {
+    const secondParagraph =
+      "This second paragraph is long enough that it will not appear in the summary line no matter how the summary is truncated at all.";
+    const childNode = node(
+      "Setup",
+      `Install steps for the widget.\n\n${secondParagraph}`,
+    );
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("Widget", ""),
+        role: "skill",
+        childPaths: ["resources/setup.md"],
+      },
+      {
+        relativePath: "resources/setup.md",
+        node: childNode,
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toContain(
+      "- [Setup](resources/setup.md) — Install steps for the widget.",
+    );
+    expect(content).not.toContain(secondParagraph);
+  });
+
+  it("round-trips YAML-sensitive frontmatter values through gray-matter", () => {
+    const riskyContexts: RenderContext[] = [
+      {
+        skillName: "widget",
+        description: "- item",
+        sourceLabel: "src",
+      },
+      {
+        skillName: "widget",
+        description: "has # hash",
+        sourceLabel: "src",
+      },
+      {
+        skillName: "line1\nline2",
+        description: "plain",
+        sourceLabel: "src",
+      },
+      {
+        skillName: "widget",
+        description: 'has "quotes" inside',
+        sourceLabel: "src",
+      },
+    ];
+
+    for (const riskyContext of riskyContexts) {
+      const files: PlannedFile[] = [
+        {
+          relativePath: "SKILL.md",
+          node: node("Widget", ""),
+          role: "skill",
+          childPaths: [],
+        },
+      ];
+
+      const rendered = renderSkillPlan(planOf(files), riskyContext);
+      const skillFile = rendered.find(
+        (file) => file.relativePath === "SKILL.md",
+      );
+      if (!skillFile) throw new Error("missing SKILL.md");
+
+      const parsed = matter(skillFile.content);
+
+      expect(Object.keys(parsed.data).sort()).toEqual(["description", "name"]);
+      expect(parsed.data.name).toBe(riskyContext.skillName);
+      expect(parsed.data.description).toBe(riskyContext.description);
+    }
+  });
+
+  it("escapes ToC link text so a malicious child name cannot hijack the link target", () => {
+    const maliciousChild = node(
+      "Evil](evil.com)[Real",
+      "Some real body content.",
+    );
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("Widget", ""),
+        role: "skill",
+        childPaths: ["resources/real.md"],
+      },
+      {
+        relativePath: "resources/real.md",
+        node: maliciousChild,
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toContain("](resources/real.md)");
+    expect(content).not.toMatch(/(?<!\\)\]\(evil\.com\)/);
+  });
+
   it("preserves relativePath on every emitted file", () => {
     const files: PlannedFile[] = [
       {

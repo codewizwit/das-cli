@@ -115,7 +115,7 @@ Exclusions: `node_modules`, hidden folders, `CHANGELOG.md`, license files, files
 1. If a node's entire subtree fits the budget, inline the whole subtree as one file, regardless of child headings.
 2. Otherwise emit an index: the node's intro plus a linked ToC of children, and recurse. The index itself obeys the budget: an oversized intro is moved to an `overview` child leaf, and an oversized ToC is chunked into category index files, deterministically, in source order, into buckets sized to the budget and labeled by their first and last entries. Grouping applies at every level, root included.
 3. Chains of single-child nodes collapse into one level.
-4. A leaf with no subheadings that exceeds the budget is emitted whole with a warning and marked oversized in the generation report. Paragraph-splitting was considered and rejected: it destroys locality.
+4. A leaf with no subheadings that exceeds the budget is emitted whole with a warning and marked oversized in the generation report. Paragraph-splitting was considered and rejected: it destroys locality. Symmetrically, if an index's single irreducible child link is itself longer than the budget (a pathologically long heading), grouping stops rather than recursing forever and that index is flagged oversized too; the guarantee is that every emitted file is within budget except these explicitly flagged leaves and indexes.
 
 Every node gets a slug and a deterministic one-line summary (first 120 characters of the first prose paragraph, cut at a word boundary; empty when a section opens with code or a table).
 

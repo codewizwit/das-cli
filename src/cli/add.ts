@@ -331,8 +331,12 @@ function buildDasJsonEmitFile(skillDir: string, data: DasJson): EmitFile {
   };
 }
 
+function oversizedPathsFor(plan: EmissionPlan): string[] {
+  return [...plan.oversized, ...plan.oversizedIndexes];
+}
+
 function buildOversizedWarning(plan: EmissionPlan): string | undefined {
-  const paths = [...plan.oversized, ...plan.oversizedIndexes];
+  const paths = oversizedPathsFor(plan);
   if (paths.length === 0) {
     return undefined;
   }
@@ -528,6 +532,8 @@ export async function runAdd(
     includeLarge,
   });
 
+  const oversizedPaths = oversizedPathsFor(plan);
+
   const dasJsonData: DasJson = {
     dasVersion: deps.dasVersion,
     slicerVersion: SLICER_VERSION,
@@ -544,6 +550,7 @@ export async function runAdd(
       ...finalRenderedFiles.map((file) => file.relativePath),
       "das.json",
     ],
+    ...(oversizedPaths.length > 0 ? { oversized: oversizedPaths } : {}),
   };
 
   const dasJsonEmitFile = buildDasJsonEmitFile(skillDir, dasJsonData);

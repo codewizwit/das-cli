@@ -101,6 +101,7 @@ export const dasJsonSchema = z
     checkIntervalHours: z.number().min(0),
     lastRefresh: z.string().datetime({ offset: true }),
     generatedFiles: z.array(generatedFilePathSchema).min(1),
+    oversized: z.array(z.string()).optional(),
   })
   .strict();
 

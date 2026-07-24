@@ -163,6 +163,41 @@ describe("runListCommand", () => {
     ).toBe(true);
   });
 
+  it("prints a note for a skill whose das.json has oversized entries", async () => {
+    const { deps, stdoutLines } = createDeps({
+      readDasJson: vi.fn(async () =>
+        Promise.resolve(
+          githubDasJson({
+            oversized: [
+              "resources/api-reference.md",
+              "resources/guides/index.md",
+            ],
+          }),
+        ),
+      ),
+    });
+
+    await runListCommand(deps);
+
+    expect(
+      stdoutLines.some(
+        (line) =>
+          line.includes("widget-docs") &&
+          line.includes("2 file(s) over budget"),
+      ),
+    ).toBe(true);
+  });
+
+  it("prints no oversized note for a skill whose das.json has no oversized entries", async () => {
+    const { deps, stdoutLines } = createDeps();
+
+    await runListCommand(deps);
+
+    expect(stdoutLines.some((line) => line.includes("over budget"))).toBe(
+      false,
+    );
+  });
+
   it("prints a message and returns when no skills are registered", async () => {
     const { deps, stdoutLines } = createDeps({
       loadManifest: vi.fn(async () =>

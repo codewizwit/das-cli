@@ -715,6 +715,34 @@ describe("runAdd", () => {
     expect(warningCalls).toHaveLength(0);
   });
 
+  it("persists the union of oversized and oversizedIndexes into das.json", async () => {
+    const { deps, spies } = createFakeDeps();
+    deps.planEmission = vi.fn(
+      (_root: DocNode, _opts: { tokenBudget: number }) => ({
+        ...fakePlanFor(),
+        oversized: ["resources/api-reference.md"],
+        oversizedIndexes: ["resources/guides/index.md"],
+      }),
+    );
+
+    await runAdd(baseArgs(), deps);
+
+    const dasJsonData = dasJsonFromWriteCall(spies.writeSkillTransactional);
+    expect(dasJsonData.oversized).toEqual([
+      "resources/api-reference.md",
+      "resources/guides/index.md",
+    ]);
+  });
+
+  it("omits the oversized field from das.json when the plan has nothing flagged", async () => {
+    const { deps, spies } = createFakeDeps();
+
+    await runAdd(baseArgs(), deps);
+
+    const dasJsonData = dasJsonFromWriteCall(spies.writeSkillTransactional);
+    expect(dasJsonData.oversized).toBeUndefined();
+  });
+
   it("honors explicit --scope/--name/--description flags without prompting, even without --yes", async () => {
     const { deps, spies } = createFakeDeps({
       projectRoot: FAKE_PROJECT_ROOT,

@@ -52,6 +52,18 @@ function remoteDasJson(overrides: Partial<DasJson> = {}): DasJson {
   };
 }
 
+function dasJsonWrittenFor(
+  writeSkillTransactionalSpy: ReturnType<typeof vi.fn>,
+  skillPath: string,
+): DasJson | undefined {
+  const call = writeSkillTransactionalSpy.mock.calls.find(
+    (call) => call[0] === skillPath,
+  );
+  const files = call?.[1] as EmitFile[] | undefined;
+  const dasJsonFile = files?.find((file) => file.relativePath === "das.json");
+  return dasJsonFile ? (JSON.parse(dasJsonFile.content) as DasJson) : undefined;
+}
+
 function manifestEntryFor(dasJson: DasJson, skillPath: string): ManifestEntry {
   return {
     name: dasJson.name,
@@ -213,9 +225,8 @@ describe("refreshSkill — local source", () => {
   it("regenerates and writes an updated das.json when the hash differs", async () => {
     const dasJson = localDasJson();
     const skillPath = "/home/user/.claude/skills/widget-docs";
-    const { deps, spies, writtenDasJson } = createFakeDeps({
-      storedFilesHash:
-        "sha256:different0000000000000000000000000000000000000000000000000000",
+    const { deps, spies } = createFakeDeps({
+      storedFilesHash: `sha256:${"d".repeat(64)}`,
       dasJsonByPath: new Map([[skillPath, dasJson]]),
     });
 
@@ -227,11 +238,61 @@ describe("refreshSkill — local source", () => {
 
     expect(outcome).toEqual({ status: "regenerated" });
     expect(spies.writeSkillTransactional).toHaveBeenCalledTimes(1);
-    const written = writtenDasJson.get(skillPath);
-    expect(written?.sourceHash).toBe(
-      "sha256:different0000000000000000000000000000000000000000000000000000",
-    );
+    const written = dasJsonWrittenFor(spies.writeSkillTransactional, skillPath);
+    expect(written?.sourceHash).toBe(`sha256:${"d".repeat(64)}`);
     expect(written?.lastRefresh).toBe(new Date(FIXED_NOW_MS).toISOString());
+  });
+
+  it("folds das.json into the single transactional write, and never calls writeDasJson, when regenerating", async () => {
+    const dasJson = localDasJson();
+    const skillPath = "/home/user/.claude/skills/widget-docs";
+    const { deps, spies } = createFakeDeps({
+      storedFilesHash: `sha256:${"d".repeat(64)}`,
+      dasJsonByPath: new Map([[skillPath, dasJson]]),
+    });
+
+    await refreshSkill(
+      manifestEntryFor(dasJson, skillPath),
+      { kind: "interactive" },
+      deps,
+    );
+
+    expect(spies.writeSkillTransactional).toHaveBeenCalledTimes(1);
+    const writeCall = spies.writeSkillTransactional.mock.calls[0]!;
+    expect(writeCall[0]).toBe(skillPath);
+    expect(
+      (writeCall[1] as EmitFile[]).some(
+        (file) => file.relativePath === "das.json",
+      ),
+    ).toBe(true);
+    expect(spies.writeDasJson).not.toHaveBeenCalled();
+  });
+
+  it("leaves nothing owned and never calls writeDasJson when the transactional write fails mid-regeneration", async () => {
+    const dasJson = localDasJson();
+    const skillPath = "/home/user/.claude/skills/widget-docs";
+    const { deps, spies } = createFakeDeps({
+      storedFilesHash: `sha256:${"d".repeat(64)}`,
+      dasJsonByPath: new Map([[skillPath, dasJson]]),
+      failWriteSkillTransactionalFor: skillPath,
+    });
+
+    await expect(
+      refreshSkill(
+        manifestEntryFor(dasJson, skillPath),
+        { kind: "interactive" },
+        deps,
+      ),
+    ).rejects.toThrow(`simulated write failure for ${skillPath}`);
+
+    expect(spies.writeSkillTransactional).toHaveBeenCalledTimes(1);
+    const writeCall = spies.writeSkillTransactional.mock.calls[0]!;
+    expect(
+      (writeCall[1] as EmitFile[]).some(
+        (file) => file.relativePath === "das.json",
+      ),
+    ).toBe(true);
+    expect(spies.writeDasJson).not.toHaveBeenCalled();
   });
 
   it("regenerates when force is set even though the hash matches", async () => {
@@ -396,11 +457,10 @@ describe("refreshSkill — remote source, interactive --update", () => {
   it("resolves at the new sha, regenerates, and re-pins das.json", async () => {
     const dasJson = remoteDasJson({ pinnedSha: "a".repeat(40) });
     const skillPath = "/home/user/.claude/skills/prisma-docs";
-    const { deps, spies, writtenDasJson } = createFakeDeps({
+    const { deps, spies } = createFakeDeps({
       dasJsonByPath: new Map([[skillPath, dasJson]]),
       lsRemoteResult: "c".repeat(40),
-      storedFilesHash:
-        "sha256:freshcontent00000000000000000000000000000000000000000000000",
+      storedFilesHash: `sha256:${"f".repeat(64)}`,
     });
 
     const outcome = await refreshSkill(
@@ -412,11 +472,9 @@ describe("refreshSkill — remote source, interactive --update", () => {
     expect(outcome).toEqual({ status: "regenerated" });
     expect(spies.resolveSource).toHaveBeenCalledTimes(1);
     expect(spies.writeSkillTransactional).toHaveBeenCalledTimes(1);
-    const written = writtenDasJson.get(skillPath);
+    const written = dasJsonWrittenFor(spies.writeSkillTransactional, skillPath);
     expect(written?.pinnedSha).toBe("c".repeat(40));
-    expect(written?.sourceHash).toBe(
-      "sha256:freshcontent00000000000000000000000000000000000000000000000",
-    );
+    expect(written?.sourceHash).toBe(`sha256:${"f".repeat(64)}`);
   });
 });
 
@@ -442,10 +500,9 @@ describe("runHookRefresh", () => {
     const dasJsonByPath = new Map(
       skills.map(({ skillPath, dasJson }) => [skillPath, dasJson]),
     );
-    const { deps, spies, writtenDasJson } = createFakeDeps({
+    const { deps, spies } = createFakeDeps({
       dasJsonByPath,
-      storedFilesHash:
-        "sha256:new-content-hash-0000000000000000000000000000000000000000",
+      storedFilesHash: `sha256:${"c".repeat(64)}`,
     });
 
     const lines = await runHookRefresh(
@@ -455,11 +512,19 @@ describe("runHookRefresh", () => {
     );
 
     expect(spies.writeSkillTransactional).toHaveBeenCalledTimes(3);
-    expect([...writtenDasJson.keys()].sort()).toEqual(
+    const writtenSkillPaths = spies.writeSkillTransactional.mock.calls.map(
+      (call) => call[0] as string,
+    );
+    expect(writtenSkillPaths.sort()).toEqual(
       ["skill-b", "skill-d", "skill-a"]
         .map((name) => `/home/user/.claude/skills/${name}`)
         .sort(),
     );
+    for (const call of spies.writeSkillTransactional.mock.calls) {
+      const files = call[1] as EmitFile[];
+      expect(files.some((file) => file.relativePath === "das.json")).toBe(true);
+    }
+    expect(spies.writeDasJson).not.toHaveBeenCalled();
     expect(lines).toHaveLength(3);
   });
 
@@ -560,8 +625,7 @@ describe("runHookRefresh", () => {
     ];
     const { deps } = createFakeDeps({
       dasJsonByPath: new Map([[workingSkillPath, workingDasJson]]),
-      storedFilesHash:
-        "sha256:new-content-hash-0000000000000000000000000000000000000000",
+      storedFilesHash: `sha256:${"c".repeat(64)}`,
     });
 
     const lines = await runHookRefresh(entries, "/home/user", deps);
@@ -607,10 +671,9 @@ describe("runHookRefresh", () => {
         dasJson,
       ]),
     );
-    const { deps, writtenDasJson } = createFakeDeps({
+    const { deps, spies } = createFakeDeps({
       dasJsonByPath,
-      storedFilesHash:
-        "sha256:new-content-hash-0000000000000000000000000000000000000000",
+      storedFilesHash: `sha256:${"c".repeat(64)}`,
       failWriteSkillTransactionalFor: skillX.skillPath,
     });
 
@@ -620,9 +683,13 @@ describe("runHookRefresh", () => {
       deps,
     );
 
-    expect(writtenDasJson.has(skillX.skillPath)).toBe(false);
-    expect(writtenDasJson.has(skillY.skillPath)).toBe(true);
-    expect(writtenDasJson.has(skillZ.skillPath)).toBe(true);
+    expect(spies.writeDasJson).not.toHaveBeenCalled();
+    expect(
+      dasJsonWrittenFor(spies.writeSkillTransactional, skillY.skillPath),
+    ).toBeDefined();
+    expect(
+      dasJsonWrittenFor(spies.writeSkillTransactional, skillZ.skillPath),
+    ).toBeDefined();
     expect(lines.sort()).toEqual(
       [
         "das: skill-y regenerated (source changed)",

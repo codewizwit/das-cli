@@ -1,5 +1,10 @@
 import { resolve, sep } from "node:path";
-import { SLICER_VERSION, type DasJson } from "../emitter/das-json.js";
+import {
+  InvalidDasJsonError,
+  SLICER_VERSION,
+  dasJsonSchema,
+  type DasJson,
+} from "../emitter/das-json.js";
 import type { RenderContext } from "../emitter/render.js";
 import type { EmissionPlan } from "../slicer/emit-plan.js";
 import type { HashParams } from "../state/hash.js";
@@ -146,6 +151,30 @@ function isCheckIntervalElapsed(dasJson: DasJson, nowMs: number): boolean {
   return elapsedHours >= dasJson.checkIntervalHours;
 }
 
+function formatDasJsonValidationIssues(
+  issues: { path: PropertyKey[]; message: string }[],
+): string {
+  return issues
+    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .join("; ");
+}
+
+function buildDasJsonEmitFile(skillDir: string, data: DasJson): EmitFile {
+  const validation = dasJsonSchema.safeParse(data);
+
+  if (!validation.success) {
+    throw new InvalidDasJsonError(
+      skillDir,
+      formatDasJsonValidationIssues(validation.error.issues),
+    );
+  }
+
+  return {
+    relativePath: "das.json",
+    content: `${JSON.stringify(validation.data, null, 2)}\n`,
+  };
+}
+
 async function regenerateSkill(
   entry: ManifestEntry,
   dasJson: DasJson,
@@ -166,17 +195,23 @@ async function regenerateSkill(
     sourceLabel,
   });
 
-  await deps.writeSkillTransactional(entry.skillPath, renderedFiles);
-
   const updatedDasJson: DasJson = {
     ...dasJson,
     pinnedSha: regeneration.pinnedSha,
     sourceHash: regeneration.sourceHash,
     lastRefresh: new Date(deps.now()).toISOString(),
-    generatedFiles: renderedFiles.map((file) => file.relativePath),
+    generatedFiles: [
+      ...renderedFiles.map((file) => file.relativePath),
+      "das.json",
+    ],
   };
 
-  await deps.writeDasJson(entry.skillPath, updatedDasJson);
+  const dasJsonEmitFile = buildDasJsonEmitFile(entry.skillPath, updatedDasJson);
+
+  await deps.writeSkillTransactional(entry.skillPath, [
+    ...renderedFiles,
+    dasJsonEmitFile,
+  ]);
 }
 
 async function evaluateLocalSource(

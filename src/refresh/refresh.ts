@@ -49,10 +49,12 @@ export interface RefreshDeps {
   ) => Promise<DocFile[]>;
   /** Resolve a ref on a remote to its current commit sha. */
   lsRemote: (url: string, ref: string) => Promise<string>;
-  /** Build a normalized documentation tree from a fileset. */
-  buildTree: (files: DocFile[], rootName: string) => DocNode;
-  /** Populate subtree token counts on a documentation tree. */
-  sizeTree: (node: DocNode) => DocNode;
+  /**
+   * Build a normalized, collapsed, sized documentation tree from a fileset; production code wires
+   * `buildSizedTree` from `src/slicer/build-sized-tree.ts`, which composes `buildTree`,
+   * `collapseSingleChildChains`, and `sizeTree` in the order the collapse guarantee requires.
+   */
+  buildSizedTree: (files: DocFile[], rootName: string) => DocNode;
   /** Decide which nodes of a sized tree become which emitted files. */
   planEmission: (
     root: DocNode,
@@ -154,7 +156,7 @@ async function regenerateSkill(
   },
   deps: RefreshDeps,
 ): Promise<void> {
-  const tree = deps.sizeTree(deps.buildTree(regeneration.files, dasJson.name));
+  const tree = deps.buildSizedTree(regeneration.files, dasJson.name);
   const plan = deps.planEmission(tree, { tokenBudget: dasJson.tokenBudget });
   const sourceLabel = deriveSourceLabel(dasJson.source);
 

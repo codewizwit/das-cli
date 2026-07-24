@@ -129,11 +129,9 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     return Promise.resolve(resolvedFiles);
   });
 
-  const buildTree = vi.fn((_files: DocFile[], _rootName: string) => ({
-    ...sizedRootNode,
-    subtreeTokens: 0,
-  }));
-  const sizeTree = vi.fn((_node: DocNode) => sizedRootNode);
+  const buildSizedTree = vi.fn(
+    (_files: DocFile[], _rootName: string) => sizedRootNode,
+  );
   const planEmission = vi.fn((_root: DocNode, _opts: { tokenBudget: number }) =>
     fakePlanFor(),
   );
@@ -205,8 +203,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     parseGithubUrl,
     lsRemote,
     resolveSource,
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     scanForInjection,
@@ -382,7 +379,7 @@ describe("runAdd", () => {
   it("caps the default description at 1024 characters", async () => {
     const longSectionName = "x".repeat(2000);
     const { deps, spies } = createFakeDeps();
-    deps.sizeTree = vi.fn((_node: DocNode) => ({
+    deps.buildSizedTree = vi.fn((_files: DocFile[], _rootName: string) => ({
       ...sizedRootNode,
       children: [
         { name: longSectionName, body: "", children: [], subtreeTokens: 1 },

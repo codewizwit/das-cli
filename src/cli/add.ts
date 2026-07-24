@@ -74,10 +74,12 @@ export interface RunAddDeps {
     ref: SourceRef,
     options: { includeLarge: boolean; pinnedSha?: string },
   ) => Promise<DocFile[]>;
-  /** Build a normalized documentation tree from a fileset. */
-  buildTree: (files: DocFile[], rootName: string) => DocNode;
-  /** Populate subtree token counts on a documentation tree. */
-  sizeTree: (node: DocNode) => DocNode;
+  /**
+   * Build a normalized, collapsed, sized documentation tree from a fileset; production code wires
+   * `buildSizedTree` from `src/slicer/build-sized-tree.ts`, which composes `buildTree`,
+   * `collapseSingleChildChains`, and `sizeTree` in the order the collapse guarantee requires.
+   */
+  buildSizedTree: (files: DocFile[], rootName: string) => DocNode;
   /** Decide which nodes of a sized tree become which emitted files. */
   planEmission: (
     root: DocNode,
@@ -398,7 +400,7 @@ export async function runAdd(
   const title = deriveTitle(sourceRef);
   const sourceLabel = deriveSourceLabel(sourceRef);
 
-  const sizedRoot = deps.sizeTree(deps.buildTree(docFiles, title));
+  const sizedRoot = deps.buildSizedTree(docFiles, title);
   const plan = deps.planEmission(sizedRoot, { tokenBudget });
 
   const defaultName = sanitizeSlug(title);

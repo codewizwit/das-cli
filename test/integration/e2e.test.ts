@@ -1,7 +1,6 @@
 import {
   cp,
   lstat,
-  mkdir,
   mkdtemp,
   readdir,
   readFile,
@@ -48,9 +47,8 @@ import {
   installSessionStartHook,
   isDasHookInstalled,
 } from "../../src/settings/hooks.js";
+import { buildSizedTree } from "../../src/slicer/build-sized-tree.js";
 import { planEmission, type EmissionPlan } from "../../src/slicer/emit-plan.js";
-import { sizeTree } from "../../src/slicer/sizing.js";
-import { buildTree } from "../../src/slicer/tree.js";
 import { hashFileset } from "../../src/state/hash.js";
 import {
   assertManagedPath,
@@ -159,8 +157,7 @@ function buildRealDeps(options: {
   const refreshEngineDeps: RefreshDeps = {
     resolveSource: resolveSourceWithGitRunner,
     lsRemote: options.lsRemote,
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     writeSkillTransactional,
@@ -182,8 +179,7 @@ function buildRealDeps(options: {
     parseGithubUrl,
     lsRemote: options.lsRemote,
     resolveSource: resolveSourceWithGitRunner,
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     scanForInjection,
@@ -289,7 +285,7 @@ async function computeExpectedPlan(
   rootName: string,
 ): Promise<EmissionPlan> {
   const files = await resolveLocal(sourceDir, { includeLarge: false });
-  const tree = sizeTree(buildTree(files, rootName));
+  const tree = buildSizedTree(files, rootName);
   return planEmission(tree, { tokenBudget });
 }
 
@@ -310,29 +306,31 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+const headingLinePattern = /^(#{1,6})\s+(.*)$/;
+
+function findAdjacentDuplicateHeadingText(content: string): string | undefined {
+  const headingTexts = content
+    .split("\n")
+    .map((line) => headingLinePattern.exec(line.trim())?.[2])
+    .filter((text): text is string => text !== undefined);
+
+  for (let index = 1; index < headingTexts.length; index += 1) {
+    if (headingTexts[index] === headingTexts[index - 1]) {
+      return headingTexts[index];
+    }
+  }
+
+  return undefined;
+}
+
 const SHA_A = "a".repeat(40);
 const SHA_B = "b".repeat(40);
-
-/**
- * Pre-create `<home>/.claude/das` before any command runs.
- *
- * Neither `saveManifest` nor any command core (`runAdd`, `runRefreshCommand`, `runRemoveCommand`,
- * `runDoctorCommand`) ever creates this directory: `saveManifest` opens `manifest.json.lock`
- * directly under `manifestBaseDir`, and nothing upstream calls `mkdir` on it first. On a real
- * machine whose `~/.claude/das` does not already exist, the very first `das add` throws `ENOENT`
- * from `withLock`. This is worked around here, in test setup, rather than in `src/`, since fixing
- * it is a `src/` change outside this task's scope; see the task report for the full finding.
- */
-async function ensureManifestBaseDirExists(home: string): Promise<void> {
-  await mkdir(join(home, ".claude", "das"), { recursive: true });
-}
 
 describe("das-cli end-to-end", () => {
   let tempHome: string;
 
   beforeEach(async () => {
     tempHome = await mkdtemp(join(tmpdir(), "das-e2e-home-"));
-    await ensureManifestBaseDirExists(tempHome);
   });
 
   afterEach(async () => {
@@ -382,14 +380,35 @@ describe("das-cli end-to-end", () => {
     );
     expect(resourcePaths.length).toBeGreaterThan(0);
 
-    const apiIndexPaths = resourcePaths.filter(
-      (path) => path.startsWith("resources/api/") && path.endsWith("index.md"),
+    const splitDirectories = new Map<string, string[]>();
+    for (const path of resourcePaths) {
+      const segments = path.split("/");
+      const directory = segments.slice(0, -1).join("/");
+      const entries = splitDirectories.get(directory) ?? [];
+      entries.push(segments[segments.length - 1] ?? "");
+      splitDirectories.set(directory, entries);
+    }
+    const progressiveDisclosureDirectory = [...splitDirectories.entries()].find(
+      ([, entries]) =>
+        entries.includes("index.md") &&
+        entries.filter((entry) => entry !== "index.md").length > 1,
     );
-    const apiLeafPaths = resourcePaths.filter(
-      (path) => path.startsWith("resources/api/") && !path.endsWith("index.md"),
-    );
-    expect(apiIndexPaths.length).toBeGreaterThanOrEqual(1);
-    expect(apiLeafPaths.length).toBeGreaterThan(1);
+    expect(
+      progressiveDisclosureDirectory,
+      "expected the large api/reference.md fixture to split into an index plus multiple resource files",
+    ).toBeDefined();
+
+    for (const path of resourcePaths) {
+      const segments = path.split("/");
+      for (let index = 1; index < segments.length; index += 1) {
+        const segment = segments[index];
+        const previousSegment = segments[index - 1];
+        expect(
+          segment,
+          `${path} has a repeated directory segment ("${previousSegment ?? ""}"), the doubled-nesting defect a missing collapse produces`,
+        ).not.toBe(previousSegment);
+      }
+    }
 
     const dasJsonContent = skillFiles.get("das.json");
     expect(dasJsonContent).toBeDefined();
@@ -442,6 +461,23 @@ describe("das-cli end-to-end", () => {
     expect(combinedContent).toContain("**Note:**");
     expect(combinedContent).not.toContain("import Tabs");
     expect(combinedContent).not.toContain("import TabItem");
+
+    for (const [relativePath, content] of skillFiles) {
+      if (relativePath === "das.json") {
+        continue;
+      }
+      expect(
+        findAdjacentDuplicateHeadingText(content),
+        `${relativePath} has a duplicate adjacent heading, the redundant-single-child-wrapper defect a missing collapse produces`,
+      ).toBeUndefined();
+    }
+
+    const installFile = skillFiles.get("resources/installation.md");
+    expect(installFile).toBeDefined();
+    expect(installFile).not.toContain("## Installation");
+    const introFile = skillFiles.get("resources/introduction.md");
+    expect(introFile).toBeDefined();
+    expect(introFile).not.toContain("## Introduction");
   });
 
   it("reports unchanged and rewrites nothing when a local source has not changed", async () => {

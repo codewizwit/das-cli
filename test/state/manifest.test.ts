@@ -174,6 +174,16 @@ describe("saveManifest", () => {
     const result = await loadManifest(baseDir);
     expect(result).toEqual({ version: 1, skills: [] });
   });
+
+  it("creates a not-yet-existing baseDir before writing", async () => {
+    const freshBaseDir = join(baseDir, ".claude", "das");
+    const manifest = validManifest();
+
+    await saveManifest(freshBaseDir, manifest);
+    const result = await loadManifest(freshBaseDir);
+
+    expect(result).toEqual(manifest);
+  });
 });
 
 describe("expectedSkillPath", () => {

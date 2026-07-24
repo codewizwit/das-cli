@@ -1,11 +1,35 @@
 {
-  "name": "das-cli",
-  "version": "0.0.0",
+  "name": "@codewizwit/das-cli",
+  "version": "0.1.0",
   "description": "Documentation as a Skill: convert a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codewizwit/das-cli.git"
+  },
+  "homepage": "https://github.com/codewizwit/das-cli#readme",
+  "bugs": {
+    "url": "https://github.com/codewizwit/das-cli/issues"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "skill",
+    "documentation",
+    "cli",
+    "progressive-disclosure"
+  ],
   "packageManager": "pnpm@10.18.2",
   "bin": {
     "das": "dist/bin/das.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20.12.0"
@@ -15,7 +39,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings=0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.4.0",

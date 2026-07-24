@@ -123,8 +123,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     return Promise.resolve(options.lsRemoteResult ?? "a".repeat(40));
   });
 
-  const buildTree = vi.fn(() => fakeNode);
-  const sizeTree = vi.fn(() => fakeNode);
+  const buildSizedTree = vi.fn(() => fakeNode);
   const planEmission = vi.fn(() => fakePlan);
   const renderSkillPlan = vi.fn(
     (_plan: EmissionPlan, _context: RenderContext) => [emitFile],
@@ -166,8 +165,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
   const deps: RefreshDeps = {
     resolveSource,
     lsRemote,
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     writeSkillTransactional,

@@ -129,11 +129,9 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     return Promise.resolve(resolvedFiles);
   });
 
-  const buildTree = vi.fn((_files: DocFile[], _rootName: string) => ({
-    ...sizedRootNode,
-    subtreeTokens: 0,
-  }));
-  const sizeTree = vi.fn((_node: DocNode) => sizedRootNode);
+  const buildSizedTree = vi.fn(
+    (_files: DocFile[], _rootName: string) => sizedRootNode,
+  );
   const planEmission = vi.fn((_root: DocNode, _opts: { tokenBudget: number }) =>
     fakePlanFor(),
   );
@@ -205,8 +203,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     parseGithubUrl,
     lsRemote,
     resolveSource,
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     scanForInjection,
@@ -382,7 +379,7 @@ describe("runAdd", () => {
   it("caps the default description at 1024 characters", async () => {
     const longSectionName = "x".repeat(2000);
     const { deps, spies } = createFakeDeps();
-    deps.sizeTree = vi.fn((_node: DocNode) => ({
+    deps.buildSizedTree = vi.fn((_files: DocFile[], _rootName: string) => ({
       ...sizedRootNode,
       children: [
         { name: longSectionName, body: "", children: [], subtreeTokens: 1 },
@@ -683,6 +680,39 @@ describe("runAdd", () => {
     await expect(runAdd(baseArgs({ scope: "project" }), deps)).rejects.toThrow(
       /projectRoot/,
     );
+  });
+
+  it("prints a warning naming oversized files when the plan flags them", async () => {
+    const { deps } = createFakeDeps();
+    const stdout = vi.fn();
+    deps.stdout = stdout;
+    deps.planEmission = vi.fn(
+      (_root: DocNode, _opts: { tokenBudget: number }) => ({
+        ...fakePlanFor(),
+        oversized: ["resources/api-reference.md"],
+        oversizedIndexes: ["resources/guides/index.md"],
+      }),
+    );
+
+    const outcome = await runAdd(baseArgs(), deps);
+
+    expect(outcome.status).toBe("written");
+    expect(stdout).toHaveBeenCalledWith(
+      "das: warning: 2 generated file(s) exceed the token budget and were emitted whole: resources/api-reference.md, resources/guides/index.md",
+    );
+  });
+
+  it("prints no oversized warning when the plan has nothing flagged", async () => {
+    const { deps } = createFakeDeps();
+    const stdout = vi.fn();
+    deps.stdout = stdout;
+
+    await runAdd(baseArgs(), deps);
+
+    const warningCalls = (stdout.mock.calls as [string][]).filter(([line]) =>
+      line.includes("exceed the token budget"),
+    );
+    expect(warningCalls).toHaveLength(0);
   });
 
   it("honors explicit --scope/--name/--description flags without prompting, even without --yes", async () => {

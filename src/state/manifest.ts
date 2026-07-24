@@ -1,4 +1,4 @@
-import { readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { InvalidDasJsonError, readDasJson } from "../emitter/das-json.js";
@@ -145,11 +145,13 @@ let tempFileSequence = 0;
 /**
  * Validate and atomically persist the manifest to `<baseDir>/manifest.json`.
  *
- * The write happens under an advisory lock on `manifest.json.lock` (default staleness threshold)
- * so concurrent das processes never interleave writes, and via a temp-file-plus-rename in the
- * same directory so a reader never observes a partially written file. If the lock is already held
- * by a live process, this returns without writing anything: the manifest is a cache, so it is safe
- * for the write to be skipped and retried on the caller's next cycle rather than blocking or
+ * `baseDir` is created (including any missing parent directories) before anything else happens,
+ * so a fresh install with no pre-existing `.claude/das` directory never fails here. The write then
+ * happens under an advisory lock on `manifest.json.lock` (default staleness threshold) so
+ * concurrent das processes never interleave writes, and via a temp-file-plus-rename in the same
+ * directory so a reader never observes a partially written file. If the lock is already held by a
+ * live process, this returns without writing anything: the manifest is a cache, so it is safe for
+ * the write to be skipped and retried on the caller's next cycle rather than blocking or
  * corrupting the file.
  *
  * @param baseDir - Absolute path to the directory to write manifest.json into
@@ -165,6 +167,8 @@ export async function saveManifest(
   if (!result.success) {
     throw new InvalidManifestError(formatZodError(result.error));
   }
+
+  await mkdir(baseDir, { recursive: true });
 
   const manifestPath = manifestPathFor(baseDir);
   const lockPath = `${manifestPath}.lock`;

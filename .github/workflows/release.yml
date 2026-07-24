@@ -1,35 +1,27 @@
-name: CI
+name: Release
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  release:
+    types: [published]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-  check:
-    name: Node ${{ matrix.node }}
+  publish:
+    name: Publish to npm
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: ["20"]
-
-    env:
-      CI: "true"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node ${{ matrix.node }}
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Enable corepack
         run: corepack enable
@@ -49,5 +41,7 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Smoke test the built binary
-        run: node dist/bin/das.js --help
+      - name: Publish
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

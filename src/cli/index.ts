@@ -17,9 +17,8 @@ import {
   installSessionStartHook,
   isDasHookInstalled,
 } from "../settings/hooks.js";
+import { buildSizedTree } from "../slicer/build-sized-tree.js";
 import { planEmission } from "../slicer/emit-plan.js";
-import { sizeTree } from "../slicer/sizing.js";
-import { buildTree } from "../slicer/tree.js";
 import { hashFileset } from "../state/hash.js";
 import {
   assertManagedPath,
@@ -76,8 +75,7 @@ export function createProductionAddDeps(): RunAddDeps {
           ? { pinnedSha: options.pinnedSha }
           : {}),
       }),
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     scanForInjection,
@@ -117,8 +115,7 @@ export function createProductionRefreshEngineDeps(): RefreshDeps {
           : {}),
       }),
     lsRemote,
-    buildTree,
-    sizeTree,
+    buildSizedTree,
     planEmission,
     renderSkillPlan,
     writeSkillTransactional,
@@ -364,7 +361,8 @@ export function createProgram(): Command {
     .name("das")
     .description(
       "Documentation as a Skill: convert documentation into a token-bounded Claude Code skill.",
-    );
+    )
+    .version(readPackageVersion(), "-v, --version");
 
   program
     .command("add")

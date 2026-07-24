@@ -7,6 +7,9 @@
   "bin": {
     "das": "dist/bin/das.js"
   },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=20.12.0"
   },

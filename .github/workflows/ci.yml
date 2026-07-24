@@ -45,3 +45,9 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Smoke test the built binary
+        run: node dist/bin/das.js --help

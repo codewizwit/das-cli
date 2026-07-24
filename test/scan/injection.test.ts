@@ -221,6 +221,36 @@ describe("scanForInjection", () => {
     ]);
   });
 
+  it("flags a base64-decode line piping to a privileged sudo bash", () => {
+    const findings = scanForInjection([
+      emitFile("skill.md", "echo $PAYLOAD | base64 -d | sudo bash\n"),
+    ]);
+
+    expect(findings).toEqual([
+      {
+        relativePath: "skill.md",
+        line: 1,
+        pattern: "base64-decode",
+        excerpt: "echo $PAYLOAD | base64 -d | sudo bash",
+      },
+    ]);
+  });
+
+  it("flags a base64-decode line piping to zsh", () => {
+    const findings = scanForInjection([
+      emitFile("skill.md", "echo $PAYLOAD | base64 --decode | zsh\n"),
+    ]);
+
+    expect(findings).toEqual([
+      {
+        relativePath: "skill.md",
+        line: 1,
+        pattern: "base64-decode",
+        excerpt: "echo $PAYLOAD | base64 --decode | zsh",
+      },
+    ]);
+  });
+
   it("produces zero findings for benign prose using flagged words without injection shape", () => {
     const findings = scanForInjection([
       emitFile(

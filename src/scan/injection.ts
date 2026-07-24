@@ -48,9 +48,12 @@ const TOOL_CALL_ARGUMENTS_KEY_PATTERN = /"arguments"\s*:/;
 const CURL_OR_WGET_PIPE_SHELL_PATTERN =
   /\b(curl|wget)\b.*\|\s*(sudo\s+)?(sh|bash|zsh|dash|ksh|fish)\b/i;
 
-/** A base64-decoded payload piped straight into a shell. */
+/**
+ * A base64-decoded payload piped into a shell, optionally elevated with `sudo`,
+ * across common shells.
+ */
 const BASE64_DECODE_PIPE_SHELL_PATTERN =
-  /base64\s+(-d|--decode)\b.*\|\s*(sh|bash)\b/i;
+  /base64\s+(-d|--decode)\b.*\|\s*(sudo\s+)?(sh|bash|zsh|dash|ksh|fish)\b/i;
 
 /** A single fence-injection tripwire hit within a generated skill file. */
 export interface InjectionFinding {

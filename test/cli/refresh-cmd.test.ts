@@ -22,14 +22,18 @@ function manifestOf(skills: ManifestEntry[]): Manifest {
 }
 
 const fakeRefreshDeps = {} as RefreshDeps;
+const FIXED_NOW_MS = Date.parse("2026-07-24T12:00:00.000Z");
+const FIXED_NOW_ISO = new Date(FIXED_NOW_MS).toISOString();
 
 function createDeps(overrides: Partial<RunRefreshCommandDeps> = {}): {
   deps: RunRefreshCommandDeps;
   stdoutLines: string[];
   stderrLines: string[];
+  saveManifest: ReturnType<typeof vi.fn>;
 } {
   const stdoutLines: string[] = [];
   const stderrLines: string[] = [];
+  const saveManifest = vi.fn(async () => Promise.resolve());
 
   const deps: RunRefreshCommandDeps = {
     loadManifest: vi.fn(async () => Promise.resolve(manifestOf([entry()]))),
@@ -38,14 +42,21 @@ function createDeps(overrides: Partial<RunRefreshCommandDeps> = {}): {
     ),
     runHookRefresh: vi.fn(async () => Promise.resolve([])),
     refreshDeps: fakeRefreshDeps,
+    saveManifest,
     manifestBaseDir: "/home/tester/.claude/das",
     currentDirectory: "/repo/project",
+    now: () => FIXED_NOW_MS,
     stdout: (line) => stdoutLines.push(line),
     stderr: (line) => stderrLines.push(line),
     ...overrides,
   };
 
-  return { deps, stdoutLines, stderrLines };
+  return {
+    deps,
+    stdoutLines,
+    stderrLines,
+    saveManifest: deps.saveManifest as ReturnType<typeof vi.fn>,
+  };
 }
 
 describe("runRefreshCommand", () => {
@@ -190,5 +201,225 @@ describe("runRefreshCommand", () => {
     expect(stdoutLines.some((line) => line.includes("error - boom"))).toBe(
       true,
     );
+  });
+});
+
+describe("runRefreshCommand manifest write-back", () => {
+  function savedSkills(
+    saveManifest: ReturnType<typeof vi.fn>,
+  ): ManifestEntry[] {
+    const call = saveManifest.mock.calls[0] as [string, Manifest] | undefined;
+    if (!call) {
+      throw new Error("saveManifest was never called");
+    }
+    return call[1].skills;
+  }
+
+  it("sets updateAvailable and bumps lastCheck on update-available", async () => {
+    const refreshSkill = vi.fn(async (): Promise<RefreshOutcome> =>
+      Promise.resolve({ status: "update-available", detail: "..." }),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(manifestOf([entry({ updateAvailable: false })])),
+      ),
+      refreshSkill,
+    });
+
+    await runRefreshCommand({ name: "widget-docs" }, deps);
+
+    expect(saveManifest).toHaveBeenCalledTimes(1);
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: true,
+      lastCheck: FIXED_NOW_ISO,
+    });
+  });
+
+  it("clears updateAvailable and bumps lastCheck on regenerated", async () => {
+    const refreshSkill = vi.fn(async (): Promise<RefreshOutcome> =>
+      Promise.resolve({ status: "regenerated" }),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(manifestOf([entry({ updateAvailable: true })])),
+      ),
+      refreshSkill,
+    });
+
+    await runRefreshCommand({ name: "widget-docs" }, deps);
+
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: false,
+      lastCheck: FIXED_NOW_ISO,
+    });
+  });
+
+  it("clears updateAvailable and bumps lastCheck on unchanged", async () => {
+    const refreshSkill = vi.fn(async (): Promise<RefreshOutcome> =>
+      Promise.resolve({ status: "unchanged" }),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(manifestOf([entry({ updateAvailable: true })])),
+      ),
+      refreshSkill,
+    });
+
+    await runRefreshCommand({ name: "widget-docs" }, deps);
+
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: false,
+      lastCheck: FIXED_NOW_ISO,
+    });
+  });
+
+  it("leaves a prior updateAvailable=true intact on skipped", async () => {
+    const refreshSkill = vi.fn(async (): Promise<RefreshOutcome> =>
+      Promise.resolve({ status: "skipped" }),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(
+          manifestOf([
+            entry({
+              updateAvailable: true,
+              lastCheck: "2026-01-01T00:00:00.000Z",
+            }),
+          ]),
+        ),
+      ),
+      refreshSkill,
+    });
+
+    await runRefreshCommand({ name: "widget-docs" }, deps);
+
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: true,
+      lastCheck: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("bumps lastCheck but leaves updateAvailable as-is on stale", async () => {
+    const refreshSkill = vi.fn(async (): Promise<RefreshOutcome> =>
+      Promise.resolve({ status: "stale" }),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(manifestOf([entry({ updateAvailable: true })])),
+      ),
+      refreshSkill,
+    });
+
+    await runRefreshCommand({ name: "widget-docs" }, deps);
+
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: true,
+      lastCheck: FIXED_NOW_ISO,
+    });
+  });
+
+  it("persists all --all entries in a single saveManifest call", async () => {
+    const entries = [
+      entry({ name: "one", updateAvailable: false }),
+      entry({ name: "two", scope: "project", updateAvailable: true }),
+    ];
+    const refreshSkill = vi
+      .fn()
+      .mockResolvedValueOnce({ status: "update-available", detail: "x" })
+      .mockResolvedValueOnce({ status: "regenerated" });
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () => Promise.resolve(manifestOf(entries))),
+      refreshSkill,
+    });
+
+    await runRefreshCommand({ all: true }, deps);
+
+    expect(saveManifest).toHaveBeenCalledTimes(1);
+    const skills = savedSkills(saveManifest);
+    expect(skills.find((s) => s.name === "one")?.updateAvailable).toBe(true);
+    expect(skills.find((s) => s.name === "two")?.updateAvailable).toBe(false);
+  });
+
+  it("--hook sets updateAvailable=true for a skill mentioned in an upstream-update line", async () => {
+    const runHookRefresh = vi.fn(async () =>
+      Promise.resolve(["das: widget-docs has upstream updates; run '...'"]),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(manifestOf([entry({ updateAvailable: false })])),
+      ),
+      runHookRefresh,
+    });
+
+    await runRefreshCommand({ hook: true }, deps);
+
+    expect(saveManifest).toHaveBeenCalledTimes(1);
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: true,
+      lastCheck: FIXED_NOW_ISO,
+    });
+  });
+
+  it("--hook clears updateAvailable for a skill mentioned in a regenerated line", async () => {
+    const runHookRefresh = vi.fn(async () =>
+      Promise.resolve(["das: widget-docs regenerated (source changed)"]),
+    );
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(manifestOf([entry({ updateAvailable: true })])),
+      ),
+      runHookRefresh,
+    });
+
+    await runRefreshCommand({ hook: true }, deps);
+
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({ updateAvailable: false });
+  });
+
+  it("--hook leaves entries untouched when no line mentions them", async () => {
+    const runHookRefresh = vi.fn(async () => Promise.resolve([]));
+    const { deps, saveManifest } = createDeps({
+      loadManifest: vi.fn(async () =>
+        Promise.resolve(
+          manifestOf([
+            entry({
+              updateAvailable: true,
+              lastCheck: "2026-01-01T00:00:00.000Z",
+            }),
+          ]),
+        ),
+      ),
+      runHookRefresh,
+    });
+
+    await runRefreshCommand({ hook: true }, deps);
+
+    const [updated] = savedSkills(saveManifest);
+    expect(updated).toMatchObject({
+      updateAvailable: true,
+      lastCheck: "2026-01-01T00:00:00.000Z",
+    });
+  });
+
+  it("--hook still returns its lines when saveManifest rejects", async () => {
+    const runHookRefresh = vi.fn(async () =>
+      Promise.resolve(["das: widget-docs has upstream updates; run '...'"]),
+    );
+    const saveManifest = vi.fn(() => {
+      throw new Error("disk full");
+    });
+    const { deps } = createDeps({ runHookRefresh, saveManifest });
+
+    await expect(runRefreshCommand({ hook: true }, deps)).resolves.toEqual({
+      status: "hook",
+      lines: ["das: widget-docs has upstream updates; run '...'"],
+    });
   });
 });

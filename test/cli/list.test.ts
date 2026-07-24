@@ -45,8 +45,10 @@ function skillMdWithDescription(description: string): string {
 function createDeps(overrides: Partial<RunListCommandDeps> = {}): {
   deps: RunListCommandDeps;
   stdoutLines: string[];
+  stderrLines: string[];
 } {
   const stdoutLines: string[] = [];
+  const stderrLines: string[] = [];
 
   const deps: RunListCommandDeps = {
     loadManifest: vi.fn(async () =>
@@ -62,10 +64,11 @@ function createDeps(overrides: Partial<RunListCommandDeps> = {}): {
     now: () => FIXED_NOW_MS,
     manifestBaseDir: "/home/tester/.claude/das",
     stdout: (line) => stdoutLines.push(line),
+    stderr: (line) => stderrLines.push(line),
     ...overrides,
   };
 
-  return { deps, stdoutLines };
+  return { deps, stdoutLines, stderrLines };
 }
 
 describe("runListCommand", () => {

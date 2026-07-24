@@ -87,7 +87,7 @@ export async function runHookInstallCommand(
     args.yes === true ? true : await deps.confirmProjectInstall(settingsPath);
 
   if (!confirmed) {
-    deps.stdout("das: hook not installed");
+    deps.stdout("das: hook not installed (declined)");
     return { status: "declined", settingsPath };
   }
 

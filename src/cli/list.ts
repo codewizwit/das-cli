@@ -19,6 +19,8 @@ export interface RunListCommandDeps {
   manifestBaseDir: string;
   /** Write a line to stdout. */
   stdout: (line: string) => void;
+  /** Write a line to stderr. */
+  stderr: (line: string) => void;
 }
 
 function shortSourceLabel(source: DasJson["source"]): string {

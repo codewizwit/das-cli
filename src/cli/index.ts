@@ -150,8 +150,10 @@ export function createProductionRefreshDeps(): RunRefreshCommandDeps {
     refreshSkill,
     runHookRefresh,
     refreshDeps: createProductionRefreshEngineDeps(),
+    saveManifest,
     manifestBaseDir: join(home, ".claude", "das"),
     currentDirectory: process.cwd(),
+    now: () => Date.now(),
     stdout: (line) => process.stdout.write(`${line}\n`),
     stderr: (line) => process.stderr.write(`${line}\n`),
   };
@@ -172,6 +174,7 @@ export function createProductionListDeps(): RunListCommandDeps {
     now: () => Date.now(),
     manifestBaseDir: join(home, ".claude", "das"),
     stdout: (line) => process.stdout.write(`${line}\n`),
+    stderr: (line) => process.stderr.write(`${line}\n`),
   };
 }
 
@@ -212,6 +215,7 @@ export function createProductionDoctorDeps(): RunDoctorCommandDeps {
     projectRoot: process.cwd(),
     manifestBaseDir: join(home, ".claude", "das"),
     stdout: (line) => process.stdout.write(`${line}\n`),
+    stderr: (line) => process.stderr.write(`${line}\n`),
   };
 }
 
@@ -450,7 +454,7 @@ export function createProgram(): Command {
         await runListCommand(deps);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`das: ${message}\n`);
+        deps.stderr(`das: ${message}`);
         process.exitCode = 1;
       }
     });
@@ -493,7 +497,7 @@ export function createProgram(): Command {
         await runDoctorCommand(deps);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`das: ${message}\n`);
+        deps.stderr(`das: ${message}`);
         process.exitCode = 1;
       }
     });
@@ -517,14 +521,7 @@ export function createProgram(): Command {
       const deps = createProductionHookInstallDeps();
 
       try {
-        const outcome = await runHookInstallCommand(
-          toHookInstallArgs(options),
-          deps,
-        );
-
-        if (outcome.status === "declined") {
-          process.exitCode = 1;
-        }
+        await runHookInstallCommand(toHookInstallArgs(options), deps);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         deps.stderr(`das: ${message}`);

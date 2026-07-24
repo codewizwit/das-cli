@@ -261,6 +261,15 @@ describe("createProgram list", () => {
     expect(runListCommandMock).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBeUndefined();
   });
+
+  it("sets a nonzero exit code when runListCommand rejects (e.g. loadManifest failing)", async () => {
+    runListCommandMock.mockRejectedValue(new Error("disk exploded"));
+    const program = createProgram();
+
+    await program.parseAsync(["list"], { from: "user" });
+
+    expect(process.exitCode).toBe(1);
+  });
 });
 
 describe("createProgram remove", () => {
@@ -324,6 +333,15 @@ describe("createProgram doctor", () => {
     expect(runDoctorCommandMock).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBeUndefined();
   });
+
+  it("sets a nonzero exit code when runDoctorCommand rejects (e.g. rebuildManifest failing)", async () => {
+    runDoctorCommandMock.mockRejectedValue(new Error("scan failed"));
+    const program = createProgram();
+
+    await program.parseAsync(["doctor"], { from: "user" });
+
+    expect(process.exitCode).toBe(1);
+  });
 });
 
 describe("createProgram hook install", () => {
@@ -351,7 +369,7 @@ describe("createProgram hook install", () => {
     expect(args).toEqual({ project: true, yes: true });
   });
 
-  it("sets a nonzero exit code on a declined outcome", async () => {
+  it("leaves the exit code unset on a declined outcome; declining is not a failure", async () => {
     runHookInstallCommandMock.mockResolvedValue({
       status: "declined",
       settingsPath: "/repo/project/.claude/settings.json",
@@ -361,6 +379,27 @@ describe("createProgram hook install", () => {
     await program.parseAsync(["hook", "install", "--project"], {
       from: "user",
     });
+
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("leaves the exit code unset on an already-present outcome", async () => {
+    runHookInstallCommandMock.mockResolvedValue({
+      status: "already-present",
+      settingsPath: "/home/tester/.claude/settings.json",
+    });
+    const program = createProgram();
+
+    await program.parseAsync(["hook", "install"], { from: "user" });
+
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("sets a nonzero exit code when runHookInstallCommand throws", async () => {
+    runHookInstallCommandMock.mockRejectedValue(new Error("boom"));
+    const program = createProgram();
+
+    await program.parseAsync(["hook", "install"], { from: "user" });
 
     expect(process.exitCode).toBe(1);
   });

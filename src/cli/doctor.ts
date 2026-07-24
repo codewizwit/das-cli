@@ -20,6 +20,8 @@ export interface RunDoctorCommandDeps {
   manifestBaseDir: string;
   /** Write a line to stdout. */
   stdout: (line: string) => void;
+  /** Write a line to stderr. */
+  stderr: (line: string) => void;
 }
 
 /** A minimal identity for a manifest entry, used to report what `das doctor` changed. */

@@ -62,8 +62,10 @@ describe("runDoctorCommand", () => {
   function createDeps(overrides: Partial<RunDoctorCommandDeps> = {}): {
     deps: RunDoctorCommandDeps;
     stdoutLines: string[];
+    stderrLines: string[];
   } {
     const stdoutLines: string[] = [];
+    const stderrLines: string[] = [];
 
     const deps: RunDoctorCommandDeps = {
       loadManifest,
@@ -72,10 +74,11 @@ describe("runDoctorCommand", () => {
       home,
       manifestBaseDir,
       stdout: (line) => stdoutLines.push(line),
+      stderr: (line) => stderrLines.push(line),
       ...overrides,
     };
 
-    return { deps, stdoutLines };
+    return { deps, stdoutLines, stderrLines };
   }
 
   it("rebuilds a manifest from a fixture skills dir and reports it as added", async () => {

@@ -1,5 +1,7 @@
 # das
 
+**[Documentation site](https://codewizwit.github.io/das-cli/)**. This README is the quickstart; the site has the full docs, command reference, and architecture diagrams.
+
 **Documentation as a Skill.** Point `das` at a GitHub URL, a Markdown file, a docs folder, or a project root, and it slices the documentation into a token-bounded, progressive-disclosure Claude Code skill: a `SKILL.md` table of contents plus a tree of resource files, each sized to fit inside a budget. Claude loads the index, then only the sections it actually needs.
 
 ```

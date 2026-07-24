@@ -51,10 +51,16 @@ function createDasSessionStartEntry(): Record<string, unknown> {
   };
 }
 
+function hooksRecordOf(
+  settings: Record<string, unknown>,
+): Record<string, unknown> {
+  return isRecord(settings.hooks) ? settings.hooks : {};
+}
+
 function mergeDasHook(
   settings: Record<string, unknown>,
 ): Record<string, unknown> {
-  const hooksValue = isRecord(settings.hooks) ? settings.hooks : {};
+  const hooksValue = hooksRecordOf(settings);
   const sessionStartValue: unknown[] = Array.isArray(hooksValue.SessionStart)
     ? hooksValue.SessionStart
     : [];
@@ -82,16 +88,15 @@ async function writeSettingsAtomically(
   tempFileSequence += 1;
 
   const serialized = `${JSON.stringify(settings, null, 2)}\n`;
-  await writeFile(tempPath, serialized, "utf-8");
 
   try {
+    await writeFile(tempPath, serialized, "utf-8");
     JSON.parse(await readFile(tempPath, "utf-8"));
+    await rename(tempPath, settingsPath);
   } catch (error) {
     await rm(tempPath, { force: true });
     throw error;
   }
-
-  await rename(tempPath, settingsPath);
 }
 
 /**
@@ -140,7 +145,7 @@ export async function installSessionStartHook(
     settings = parsed;
   }
 
-  const hooksValue = isRecord(settings.hooks) ? settings.hooks : {};
+  const hooksValue = hooksRecordOf(settings);
 
   if (hasDasSessionStartHook(hooksValue.SessionStart)) {
     return "already-present";

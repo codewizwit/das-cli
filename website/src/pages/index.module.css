@@ -1,28 +1,290 @@
-/**
- * CSS files with the .module.css suffix will be treated as CSS modules
- * and scoped locally.
- */
+/* Landing page: cream hero with a dark terminal demo, feature cards, flow strip. */
 
-.heroBanner {
-  padding: 4rem 0;
-  text-align: center;
+.hero {
   position: relative;
   overflow: hidden;
+  background:
+    radial-gradient(
+      1100px 560px at 82% -12%,
+      var(--das-accent-soft),
+      transparent 60%
+    ),
+    var(--das-cream);
+  color: var(--das-ink);
+  padding: 5.5rem 1.5rem 5rem;
+  border-bottom: 1px solid var(--ifm-toc-border-color);
 }
 
-@media screen and (max-width: 996px) {
-  .heroBanner {
-    padding: 2rem;
-  }
+.heroInner {
+  max-width: 1160px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 3.5rem;
+  align-items: center;
 }
 
-.buttons {
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--das-accent);
+  margin: 0 0 1rem;
+}
+
+.title {
+  font-size: clamp(2.2rem, 4.4vw, 3.4rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  margin: 0 0 1.1rem;
+  color: var(--das-ink);
+}
+
+.subtitle {
+  font-size: 1.12rem;
+  line-height: 1.6;
+  color: var(--ifm-color-emphasis-700);
+  max-width: 34rem;
+  margin: 0 0 1.8rem;
+}
+
+.install {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--das-surface);
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.95rem;
+  color: var(--das-ink);
+  margin-bottom: 1.8rem;
+  box-shadow: 0 1px 2px rgba(20, 17, 12, 0.05);
+}
+
+.installPrompt {
+  color: var(--das-accent);
+  font-weight: 700;
+}
+
+.install code {
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0;
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+}
+
+.primaryCta,
+.primaryCta:hover {
+  background: var(--das-accent);
+  color: #fff7f2;
+  font-weight: 700;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  text-decoration: none;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+  box-shadow: 0 8px 22px rgba(217, 79, 42, 0.28);
+}
+
+.primaryCta:hover {
+  transform: translateY(-1px);
+}
+
+.secondaryCta,
+.secondaryCta:hover {
+  color: var(--das-ink);
+  font-weight: 600;
+  padding: 0.75rem 1.4rem;
+  border-radius: 10px;
+  text-decoration: none;
+  border: 1px solid var(--das-ink);
+  transition: background-color 0.12s ease;
+}
+
+.secondaryCta:hover {
+  background: rgba(20, 17, 12, 0.05);
+}
+
+/* terminal frame around the demo gif (stays dark for contrast on cream) */
+.heroDemo {
+  min-width: 0;
+}
+
+.terminal {
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0d1117;
+  border: 1px solid rgba(20, 17, 12, 0.12);
+  box-shadow: 0 24px 60px rgba(20, 17, 12, 0.22);
+}
+
+.terminalBar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 1rem;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  background: #161b22;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.main {
-  padding: 2rem 0 3rem;
+.dotRed,
+.dotYellow,
+.dotGreen {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dotRed {
+  background: #ff5f56;
+}
+
+.dotYellow {
+  background: #ffbd2e;
+}
+
+.dotGreen {
+  background: #27c93f;
+}
+
+.terminalTitle {
+  margin-left: 0.5rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  color: #7d8896;
+}
+
+.terminalImg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* features */
+.features {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 1rem;
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.featureCard {
+  position: relative;
+  border: 1px solid var(--ifm-toc-border-color);
+  border-radius: 14px;
+  padding: 1.5rem 1.5rem 1.6rem;
+  background: var(--das-surface);
+  transition:
+    transform 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.featureCard:hover {
+  transform: translateY(-2px);
+  border-color: var(--das-accent);
+}
+
+.featureBar {
+  display: block;
+  width: 32px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--das-accent);
+  margin-bottom: 1rem;
+}
+
+.featureTitle {
+  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+  color: var(--das-ink);
+}
+
+.featureBody {
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* flow strip */
+.flow {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4.5rem;
+  text-align: center;
+}
+
+.flowLabel {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--das-accent);
+  margin: 0 0 1.1rem;
+}
+
+.flowSteps {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.flowStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.flowName {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 1.05rem;
+  font-weight: 600;
+  padding: 0.45rem 0.95rem;
+  border-radius: 10px;
+  background: var(--das-accent-soft);
+  color: var(--das-accent);
+}
+
+.flowArrow {
+  color: var(--ifm-color-emphasis-500);
+  font-size: 1.1rem;
+}
+
+.flowNote {
+  margin: 1.5rem auto 0;
+  max-width: 40rem;
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.55;
+}
+
+@media screen and (max-width: 920px) {
+  .heroInner {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .hero {
+    padding: 3.5rem 1.25rem 3rem;
+  }
+
+  .featureGrid {
+    grid-template-columns: 1fr;
+  }
 }

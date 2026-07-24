@@ -1,16 +1,18 @@
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
-import { Command } from "commander";
-import { readDasJson, writeDasJson } from "../emitter/das-json.js";
+import { Command, InvalidArgumentError } from "commander";
+import { readDasJson } from "../emitter/das-json.js";
 import { renderSkillPlan } from "../emitter/render.js";
 import { writeSkillTransactional } from "../emitter/write.js";
 import { parseGithubUrl } from "../resolver/github-url.js";
 import { lsRemote } from "../resolver/git.js";
 import { resolveSource } from "../resolver/resolve.js";
 import { scanForInjection } from "../scan/injection.js";
-import { installSessionStartHook } from "../settings/hooks.js";
+import {
+  installSessionStartHook,
+  isDasHookInstalled,
+} from "../settings/hooks.js";
 import { planEmission } from "../slicer/emit-plan.js";
 import { sizeTree } from "../slicer/sizing.js";
 import { buildTree } from "../slicer/tree.js";
@@ -23,64 +25,6 @@ import {
 } from "../state/manifest.js";
 import { runAdd, type AddArgs, type RunAddDeps } from "./add.js";
 import { createInteractivePrompts } from "./wizard.js";
-
-const DAS_SESSION_START_COMMAND = "das refresh --hook";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Check whether the DAS SessionStart hook is already present in a settings.json, without
- * mutating the file.
- *
- * This is a read-only counterpart to {@link installSessionStartHook}: the wizard step needs to
- * know whether the hook already exists before deciding whether to prompt at all, but
- * {@link installSessionStartHook} always installs when it is absent, which would be a premature
- * side effect if the user has not yet been asked.
- *
- * @param settingsPath - Absolute path to the settings.json to check
- * @returns Whether a DAS SessionStart hook entry is already present
- */
-export async function hasSessionStartHook(
-  settingsPath: string,
-): Promise<boolean> {
-  let raw: string;
-
-  try {
-    raw = await readFile(settingsPath, "utf-8");
-  } catch {
-    return false;
-  }
-
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return false;
-  }
-
-  if (!isRecord(parsed) || !isRecord(parsed.hooks)) {
-    return false;
-  }
-
-  const sessionStart = parsed.hooks.SessionStart;
-  if (!Array.isArray(sessionStart)) {
-    return false;
-  }
-
-  return sessionStart.some((entry: unknown) => {
-    if (!isRecord(entry) || !Array.isArray(entry.hooks)) {
-      return false;
-    }
-
-    return entry.hooks.some(
-      (hook: unknown) =>
-        isRecord(hook) && hook.command === DAS_SESSION_START_COMMAND,
-    );
-  });
-}
 
 function readPackageVersion(): string {
   try {
@@ -116,14 +60,13 @@ export function createProductionAddDeps(): RunAddDeps {
     renderSkillPlan,
     scanForInjection,
     writeSkillTransactional,
-    writeDasJson,
     readDasJson,
     hashFileset,
     loadManifest,
     saveManifest,
     expectedSkillPath,
     assertManagedPath,
-    hasSessionStartHook,
+    hasSessionStartHook: isDasHookInstalled,
     installSessionStartHook,
     prompts: createInteractivePrompts(),
     now: () => Date.now(),
@@ -143,7 +86,7 @@ interface AddCommandOptions {
   hook: boolean;
   yes?: boolean;
   includeLarge?: boolean;
-  tokenBudget?: string;
+  tokenBudget?: number;
   force?: boolean;
 }
 
@@ -161,10 +104,37 @@ function toAddArgs(source: string, options: AddCommandOptions): AddArgs {
       ? { includeLarge: options.includeLarge }
       : {}),
     ...(options.tokenBudget !== undefined
-      ? { tokenBudget: Number.parseInt(options.tokenBudget, 10) }
+      ? { tokenBudget: options.tokenBudget }
       : {}),
     ...(options.force !== undefined ? { force: options.force } : {}),
   };
+}
+
+/**
+ * Parse and validate the `--token-budget` Commander option.
+ *
+ * Rejecting a malformed value here, before `runAdd` ever runs, is what keeps a typo like
+ * `--token-budget not-a-number` from reaching the pipeline as `NaN`.
+ *
+ * @param value - The raw string Commander captured for `--token-budget`
+ * @returns The parsed positive integer
+ * @throws {@link InvalidArgumentError} When `value` is not a positive integer
+ */
+export function parseTokenBudgetOption(value: string): number {
+  if (!/^\d+$/.test(value.trim())) {
+    throw new InvalidArgumentError(
+      `--token-budget must be a positive integer, got "${value}".`,
+    );
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (parsed <= 0) {
+    throw new InvalidArgumentError(
+      `--token-budget must be a positive integer, got "${value}".`,
+    );
+  }
+
+  return parsed;
 }
 
 /**
@@ -174,10 +144,16 @@ function toAddArgs(source: string, options: AddCommandOptions): AddArgs {
  * dependencies, and translates the returned {@link AddOutcome} (or a thrown error) into process
  * output and an exit code. All orchestration logic lives in `runAdd`.
  *
+ * `exitOverride()` is set so a parsing failure (for example an invalid `--token-budget`) throws a
+ * `CommanderError` instead of calling `process.exit` directly, which is what lets this program be
+ * driven from tests without killing the test process; a real `bin` entry point calling
+ * `parseAsync` is expected to catch that error and set `process.exitCode` itself.
+ *
  * @returns The configured Commander program
  */
 export function createProgram(): Command {
   const program = new Command();
+  program.exitOverride();
   program
     .name("das")
     .description(
@@ -197,7 +173,11 @@ export function createProgram(): Command {
       "--include-large",
       "include files over the 1MB size guard instead of skipping them",
     )
-    .option("--token-budget <n>", "per-file token budget")
+    .option(
+      "--token-budget <n>",
+      "per-file token budget",
+      parseTokenBudgetOption,
+    )
     .option(
       "--force",
       "overwrite a name collision with a skill from a different source",

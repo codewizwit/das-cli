@@ -74,6 +74,34 @@ function mergeDasHook(
   };
 }
 
+async function readSettingsOrUndefined(
+  settingsPath: string,
+): Promise<Record<string, unknown> | undefined> {
+  let raw: string;
+
+  try {
+    raw = await readFile(settingsPath, "utf-8");
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new SettingsParseError(settingsPath);
+  }
+
+  if (!isRecord(parsed)) {
+    throw new SettingsParseError(settingsPath);
+  }
+
+  return parsed;
+}
+
 let tempFileSequence = 0;
 
 async function writeSettingsAtomically(
@@ -116,35 +144,7 @@ async function writeSettingsAtomically(
 export async function installSessionStartHook(
   settingsPath: string,
 ): Promise<"installed" | "already-present"> {
-  let raw: string | undefined;
-
-  try {
-    raw = await readFile(settingsPath, "utf-8");
-  } catch (error) {
-    if (isErrnoException(error) && error.code === "ENOENT") {
-      raw = undefined;
-    } else {
-      throw error;
-    }
-  }
-
-  let settings: Record<string, unknown> = {};
-
-  if (raw !== undefined) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new SettingsParseError(settingsPath);
-    }
-
-    if (!isRecord(parsed)) {
-      throw new SettingsParseError(settingsPath);
-    }
-
-    settings = parsed;
-  }
-
+  const settings = (await readSettingsOrUndefined(settingsPath)) ?? {};
   const hooksValue = hooksRecordOf(settings);
 
   if (hasDasSessionStartHook(hooksValue.SessionStart)) {
@@ -153,4 +153,32 @@ export async function installSessionStartHook(
 
   await writeSettingsAtomically(settingsPath, mergeDasHook(settings));
   return "installed";
+}
+
+/**
+ * Check whether the DAS `SessionStart` hook is already installed in a settings.json, without
+ * reading it for the purpose of mutating it.
+ *
+ * This is the read-only counterpart to {@link installSessionStartHook}: callers that need to
+ * decide *whether* to install (for example, to prompt a user only when the hook is absent) must
+ * not call {@link installSessionStartHook} just to check, since it always installs when the hook
+ * is missing. A missing settings.json is reported as `false`, not an error, matching
+ * {@link installSessionStartHook}'s own treatment of a missing file; every other unreadable or
+ * unparseable file is propagated rather than swallowed as "absent", since silently treating an
+ * unreadable settings.json as "no hook" could otherwise mask a real problem the caller should see.
+ *
+ * @param settingsPath - Absolute path to the settings.json to check
+ * @returns Whether a DAS SessionStart hook entry is already present
+ * @throws {@link SettingsParseError} When `settingsPath` exists but is not valid JSON
+ */
+export async function isDasHookInstalled(
+  settingsPath: string,
+): Promise<boolean> {
+  const settings = await readSettingsOrUndefined(settingsPath);
+
+  if (settings === undefined) {
+    return false;
+  }
+
+  return hasDasSessionStartHook(hooksRecordOf(settings).SessionStart);
 }

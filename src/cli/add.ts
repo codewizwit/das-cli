@@ -1,6 +1,11 @@
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import type { ParsedGithubUrl } from "../resolver/github-url.js";
-import { SLICER_VERSION, type DasJson } from "../emitter/das-json.js";
+import {
+  InvalidDasJsonError,
+  SLICER_VERSION,
+  dasJsonSchema,
+  type DasJson,
+} from "../emitter/das-json.js";
 import type { RenderContext } from "../emitter/render.js";
 import type { InjectionFinding } from "../scan/injection.js";
 import type { EmissionPlan } from "../slicer/emit-plan.js";
@@ -87,8 +92,6 @@ export interface RunAddDeps {
     skillDir: string,
     files: EmitFile[],
   ) => Promise<void>;
-  /** Validate and write a skill's das.json record. */
-  writeDasJson: (skillDir: string, data: DasJson) => Promise<void>;
   /** Read and validate a skill's das.json record. */
   readDasJson: (skillDir: string) => Promise<DasJson>;
   /** Compute a deterministic digest of a fileset and its generation parameters. */
@@ -141,8 +144,51 @@ export type AddOutcome =
       skillPath: string;
       fileCount: number;
       hookInstalled: boolean;
+      /** Present when `hookInstalled` is `false` because the install itself failed, not because it was skipped. */
+      hookError?: string;
     }
   | { status: "aborted"; reason: string };
+
+const skillNamePattern = /^[a-z0-9][a-z0-9-]*$/;
+const knownDocsFolderNames = new Set(["docs", "documentation", "doc"]);
+
+/** Thrown when a resolved skill name (from `--name`, the wizard, or the default) is not a valid slug. */
+export class InvalidSkillNameError extends Error {
+  constructor(name: string, suggested: string) {
+    super(
+      `Invalid skill name "${name}": must match ^[a-z0-9][a-z0-9-]*$ (for example "${suggested}"). Pass --name with a valid slug instead.`,
+    );
+    this.name = "InvalidSkillNameError";
+  }
+}
+
+/** Thrown when `--token-budget` is not a positive integer. */
+export class InvalidTokenBudgetError extends Error {
+  constructor(value: unknown) {
+    super(
+      `Invalid token budget: ${String(value)}. Must be a positive integer.`,
+    );
+    this.name = "InvalidTokenBudgetError";
+  }
+}
+
+function assertValidSkillName(name: string): void {
+  if (!skillNamePattern.test(name)) {
+    throw new InvalidSkillNameError(name, sanitizeSlug(name));
+  }
+}
+
+function resolveTokenBudget(rawTokenBudget: number | undefined): number {
+  if (rawTokenBudget === undefined) {
+    return DEFAULT_TOKEN_BUDGET;
+  }
+
+  if (!Number.isInteger(rawTokenBudget) || rawTokenBudget <= 0) {
+    throw new InvalidTokenBudgetError(rawTokenBudget);
+  }
+
+  return rawTokenBudget;
+}
 
 function humanizeSegment(segment: string): string {
   return segment.replace(/[-_]+/g, " ").trim();
@@ -155,7 +201,13 @@ function repoNameFromUrl(url: string): string {
 }
 
 function deriveLocalKind(sourcePath: string): "file" | "folder" | "project" {
-  return markdownExtensionPattern.test(sourcePath) ? "file" : "project";
+  if (markdownExtensionPattern.test(sourcePath)) {
+    return "file";
+  }
+
+  return knownDocsFolderNames.has(basename(sourcePath).toLowerCase())
+    ? "folder"
+    : "project";
 }
 
 function deriveTitle(ref: SourceRef): string {
@@ -204,8 +256,13 @@ function parseSource(
       trackedRef: parsed.ref,
     };
   } catch {
+    const resolvedPath = resolve(source);
     return {
-      ref: { type: "path", path: source, kind: deriveLocalKind(source) },
+      ref: {
+        type: "path",
+        path: resolvedPath,
+        kind: deriveLocalKind(resolvedPath),
+      },
       trackedRef: null,
     };
   }
@@ -246,6 +303,30 @@ function settingsPathFor(
   }
 
   return join(deps.projectRoot, ".claude", "settings.json");
+}
+
+function formatValidationIssues(
+  issues: { path: PropertyKey[]; message: string }[],
+): string {
+  return issues
+    .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+    .join("; ");
+}
+
+function buildDasJsonEmitFile(skillDir: string, data: DasJson): EmitFile {
+  const validation = dasJsonSchema.safeParse(data);
+
+  if (!validation.success) {
+    throw new InvalidDasJsonError(
+      skillDir,
+      formatValidationIssues(validation.error.issues),
+    );
+  }
+
+  return {
+    relativePath: "das.json",
+    content: `${JSON.stringify(validation.data, null, 2)}\n`,
+  };
 }
 
 function printPreview(
@@ -298,7 +379,7 @@ export async function runAdd(
 ): Promise<AddOutcome> {
   const yes = args.yes ?? false;
   const includeLarge = args.includeLarge ?? false;
-  const tokenBudget = args.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
+  const tokenBudget = resolveTokenBudget(args.tokenBudget);
   const hookFlag = args.hook ?? true;
   const force = args.force ?? false;
 
@@ -351,6 +432,7 @@ export async function runAdd(
 
   const name =
     args.name ?? (yes ? defaultName : await deps.prompts.name(defaultName));
+  assertValidSkillName(name);
 
   const description =
     args.description ??
@@ -429,8 +511,6 @@ export async function runAdd(
           sourceLabel,
         });
 
-  await deps.writeSkillTransactional(skillDir, finalRenderedFiles);
-
   const sourceHash = deps.hashFileset(docFiles, {
     slicerVersion: SLICER_VERSION,
     tokenBudget,
@@ -455,7 +535,12 @@ export async function runAdd(
     ],
   };
 
-  await deps.writeDasJson(skillDir, dasJsonData);
+  const dasJsonEmitFile = buildDasJsonEmitFile(skillDir, dasJsonData);
+
+  await deps.writeSkillTransactional(skillDir, [
+    ...finalRenderedFiles,
+    dasJsonEmitFile,
+  ]);
 
   const manifest = await deps.loadManifest(deps.manifestBaseDir);
   const newEntry: ManifestEntry = {
@@ -476,21 +561,30 @@ export async function runAdd(
   await deps.saveManifest(deps.manifestBaseDir, manifest);
 
   let hookInstalled = false;
+  let hookError: string | undefined;
   if (installHook) {
-    const result = await deps.installSessionStartHook(
-      settingsPathFor(scope, deps),
-    );
-    hookInstalled = result === "installed";
+    try {
+      const result = await deps.installSessionStartHook(
+        settingsPathFor(scope, deps),
+      );
+      hookInstalled = result === "installed";
+    } catch (error) {
+      hookError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   deps.stdout(
     `das: created skill "${name}" at ${skillDir} (${String(dasJsonData.generatedFiles.length)} files)`,
   );
-  deps.stdout(
-    hookInstalled
-      ? "das: installed the SessionStart hook"
-      : "das: SessionStart hook not installed",
-  );
+  if (hookError !== undefined) {
+    deps.stdout(`das: could not install the SessionStart hook: ${hookError}`);
+  } else {
+    deps.stdout(
+      hookInstalled
+        ? "das: installed the SessionStart hook"
+        : "das: SessionStart hook not installed",
+    );
+  }
 
   return {
     status: "written",
@@ -499,5 +593,6 @@ export async function runAdd(
     skillPath: skillDir,
     fileCount: dasJsonData.generatedFiles.length,
     hookInstalled,
+    ...(hookError !== undefined ? { hookError } : {}),
   };
 }

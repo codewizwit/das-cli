@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   SettingsParseError,
   installSessionStartHook,
+  isDasHookInstalled,
 } from "../../src/settings/hooks.js";
 
 const { renameFailureState } = vi.hoisted(() => ({
@@ -220,5 +221,61 @@ describe("installSessionStartHook", () => {
     expect(afterSecond).toBe(afterFirst);
     const written = readJson(afterSecond);
     expect(written.hooks.SessionStart).toHaveLength(1);
+  });
+});
+
+describe("isDasHookInstalled", () => {
+  let tempDir: string;
+  let settingsPath: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "das-hooks-detect-test-"));
+    settingsPath = join(tempDir, "settings.json");
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("returns false when settings.json does not exist", async () => {
+    await expect(isDasHookInstalled(settingsPath)).resolves.toBe(false);
+  });
+
+  it("returns false when settings.json exists but has no DAS SessionStart hook", async () => {
+    await writeFile(
+      settingsPath,
+      JSON.stringify({ hooks: { SessionStart: [] } }),
+      "utf-8",
+    );
+
+    await expect(isDasHookInstalled(settingsPath)).resolves.toBe(false);
+  });
+
+  it("returns true when the DAS SessionStart hook is present", async () => {
+    await writeFile(
+      settingsPath,
+      JSON.stringify({ hooks: { SessionStart: [dasHookEntry] } }),
+      "utf-8",
+    );
+
+    await expect(isDasHookInstalled(settingsPath)).resolves.toBe(true);
+  });
+
+  it("does not mutate settings.json while checking", async () => {
+    const serialized = `${JSON.stringify({ env: { FOO: "bar" } }, null, 2)}\n`;
+    await writeFile(settingsPath, serialized, "utf-8");
+
+    await isDasHookInstalled(settingsPath);
+
+    const after = await readFile(settingsPath, "utf-8");
+    expect(after).toBe(serialized);
+  });
+
+  it("propagates a parse error instead of treating malformed settings.json as absent", async () => {
+    await writeFile(settingsPath, "{ this is not valid json", "utf-8");
+
+    await expect(isDasHookInstalled(settingsPath)).rejects.toThrow(
+      SettingsParseError,
+    );
   });
 });

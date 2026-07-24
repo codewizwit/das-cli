@@ -1,21 +1,15 @@
 Output demo/das-demo.gif
 
 Set Shell "bash"
-Set FontSize 18
-Set Width 1200
-Set Height 760
+Set FontSize 17
+Set Width 1240
+Set Height 800
 Set Padding 24
 Set Theme "Dracula"
-Set TypingSpeed 45ms
+Set TypingSpeed 40ms
 
 Hide
-Type "export DEMO=$(mktemp -d) && export HOME=$DEMO && cd $DEMO && mkdir -p widget-docs"
-Enter
-Type "printf '%s\n' '---' 'title: Getting Started' '---' '# Getting Started' '' '## Install' 'Run npm install widget.' '' '## Usage' 'Import and call widget().' > widget-docs/intro.md"
-Enter
-Type "printf '%s\n' '# API' '' '## widget()' 'Creates a widget.' '' '## configure()' 'Sets options.' > widget-docs/api.md"
-Enter
-Type "clear"
+Type "export DEMO=$(mktemp -d) && export HOME=$DEMO && clear"
 Enter
 Show
 
@@ -23,24 +17,30 @@ Type "das --version"
 Enter
 Sleep 1500ms
 
-Type "das add ./widget-docs --yes --scope personal --no-hook"
+Type "# point das at a docs folder; it slices it into a token-bounded Claude Code skill"
+Enter
+Type "das add ./demo/sample-docs --yes --scope personal --no-hook"
 Enter
 Sleep 3500ms
+
+Type "# the big API reference was split into an index plus one file per method"
+Enter
+Type "ls ~/.claude/skills/sample-docs/resources/api-reference/"
+Enter
+Sleep 3500ms
+
+Type "# SKILL.md is the token-bounded table of contents Claude loads first"
+Enter
+Type "sed -n '6,11p' ~/.claude/skills/sample-docs/SKILL.md"
+Enter
+Sleep 4s
 
 Type "das list"
 Enter
 Sleep 3s
 
-Type "find ~/.claude/skills/widget-docs -type f | sort"
-Enter
-Sleep 3s
-
-Type "das refresh widget-docs"
-Enter
-Sleep 3s
-
 Hide
-Type "cd /Users/alexandra/projects/das-cli && rm -rf $DEMO"
+Type "rm -rf $DEMO"
 Enter
 Show
 Sleep 1s

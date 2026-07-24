@@ -353,4 +353,50 @@ describe("das-json", () => {
       );
     },
   );
+
+  it("round-trips das.json without an oversized field", async () => {
+    const data = validDasJson();
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.oversized).toBeUndefined();
+  });
+
+  it("round-trips das.json with an oversized field", async () => {
+    const data: DasJson = {
+      ...validDasJson(),
+      oversized: ["resources/api-reference.md", "resources/guides/index.md"],
+    };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.oversized).toEqual([
+      "resources/api-reference.md",
+      "resources/guides/index.md",
+    ]);
+  });
+
+  it("rejects an oversized field that is not an array", async () => {
+    const dataWithBadOversized = {
+      ...validDasJson(),
+      oversized: "resources/api-reference.md",
+    };
+    await writeFile(
+      join(skillDir, "das.json"),
+      JSON.stringify(dataWithBadOversized),
+      "utf-8",
+    );
+    await expect(readDasJson(skillDir)).rejects.toThrow(InvalidDasJsonError);
+  });
+
+  it("rejects an oversized array containing a non-string entry", async () => {
+    const dataWithBadOversized = {
+      ...validDasJson(),
+      oversized: ["resources/api-reference.md", 42],
+    };
+    await writeFile(
+      join(skillDir, "das.json"),
+      JSON.stringify(dataWithBadOversized),
+      "utf-8",
+    );
+    await expect(readDasJson(skillDir)).rejects.toThrow(InvalidDasJsonError);
+  });
 });

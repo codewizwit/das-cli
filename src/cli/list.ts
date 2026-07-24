@@ -99,30 +99,41 @@ function renderTable(rows: TableRow[], deps: RunListCommandDeps): void {
   }
 }
 
+interface BuiltRow {
+  row: TableRow;
+  oversizedCount: number;
+}
+
 async function buildRow(
   entry: ManifestEntry,
   deps: RunListCommandDeps,
-): Promise<TableRow> {
+): Promise<BuiltRow> {
   try {
     const dasJson = await deps.readDasJson(entry.skillPath);
     return {
-      name: entry.name,
-      source: shortSourceLabel(dasJson.source),
-      scope: entry.scope,
-      pinned: pinnedRefLabel(dasJson),
-      lastRefresh: dasJson.lastRefresh,
-      staleness: isStale(dasJson, deps.now()) ? "stale" : "fresh",
-      updateAvailable: entry.updateAvailable ? "yes" : "no",
+      row: {
+        name: entry.name,
+        source: shortSourceLabel(dasJson.source),
+        scope: entry.scope,
+        pinned: pinnedRefLabel(dasJson),
+        lastRefresh: dasJson.lastRefresh,
+        staleness: isStale(dasJson, deps.now()) ? "stale" : "fresh",
+        updateAvailable: entry.updateAvailable ? "yes" : "no",
+      },
+      oversizedCount: dasJson.oversized?.length ?? 0,
     };
   } catch {
     return {
-      name: entry.name,
-      source: "unreadable das.json",
-      scope: entry.scope,
-      pinned: "unknown",
-      lastRefresh: "unknown",
-      staleness: "unknown",
-      updateAvailable: entry.updateAvailable ? "yes" : "no",
+      row: {
+        name: entry.name,
+        source: "unreadable das.json",
+        scope: entry.scope,
+        pinned: "unknown",
+        lastRefresh: "unknown",
+        staleness: "unknown",
+        updateAvailable: entry.updateAvailable ? "yes" : "no",
+      },
+      oversizedCount: 0,
     };
   }
 }
@@ -166,9 +177,11 @@ async function estimateDescriptionTokens(
  * Each row is built from the manifest entry (name, scope, the persisted `updateAvailable` flag)
  * and the skill's das.json (source, pinned ref or sha, last refresh time, and staleness derived
  * from `checkIntervalHours`); a skill whose das.json cannot be read still gets a row, marked
- * `unreadable das.json` rather than aborting the whole listing. The aggregate description-token
- * total is computed separately by reading each skill's SKILL.md frontmatter description; a skill
- * missing SKILL.md is skipped from the total with a printed note rather than failing the command.
+ * `unreadable das.json` rather than aborting the whole listing. A skill whose das.json records a
+ * non-empty `oversized` list gets a printed note counting the files that exceeded the token budget
+ * at generation time. The aggregate description-token total is computed separately by reading each
+ * skill's SKILL.md frontmatter description; a skill missing SKILL.md is skipped from the total with
+ * a printed note rather than failing the command.
  *
  * @param deps - The injected effectful functions this run executes through
  */
@@ -180,10 +193,13 @@ export async function runListCommand(deps: RunListCommandDeps): Promise<void> {
     return;
   }
 
-  const rows = await Promise.all(
+  const builtRows = await Promise.all(
     manifest.skills.map((entry) => buildRow(entry, deps)),
   );
-  renderTable(rows, deps);
+  renderTable(
+    builtRows.map((builtRow) => builtRow.row),
+    deps,
+  );
 
   const { totalTokens, skippedNames } = await estimateDescriptionTokens(
     manifest.skills,
@@ -195,6 +211,15 @@ export async function runListCommand(deps: RunListCommandDeps): Promise<void> {
       `note: ${name} is missing SKILL.md; skipped from the description-token estimate`,
     );
   }
+
+  manifest.skills.forEach((entry, index) => {
+    const oversizedCount = builtRows[index]?.oversizedCount ?? 0;
+    if (oversizedCount > 0) {
+      deps.stdout(
+        `note: ${entry.name} has ${String(oversizedCount)} file(s) over budget`,
+      );
+    }
+  });
 
   deps.stdout(`descriptions load ~${String(totalTokens)} tokens every session`);
 }

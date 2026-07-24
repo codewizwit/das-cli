@@ -150,6 +150,7 @@ Every node gets a slug and a deterministic one-line summary (first 120 character
   "pinnedSha": "<commit sha resolved at add/update time>",
   "sourceHash": "sha256:...",
   "tokenBudget": 4000,
+  "includeLarge": false,
   "checkIntervalHours": 24,
   "lastRefresh": "2026-07-22T14:00:00Z",
   "generatedFiles": ["SKILL.md", "das.json", "resources/..."]

@@ -24,12 +24,31 @@ const TOOL_CALL_FENCE_INFO_STRINGS = new Set([
   "json tool",
 ]);
 
+/** A trimmed line opening with a chat-role marker, the classic role-injection shape. */
 const ROLE_MARKER_PATTERN = /^(system|assistant|user):/i;
+
+/**
+ * An always-invoke imperative aimed at the assistant requires both an always-cadence
+ * word and an assistant-directed cue on the same line, so stock "always run the tests"
+ * documentation phrasing (no assistant cue) does not fire.
+ */
 const ALWAYS_KEYWORD_PATTERN = /\b(always|every time)\b/i;
-const INVOKE_VERB_PATTERN = /\b(run|execute|consult|invoke)\b/i;
+const ASSISTANT_DIRECTED_CUE_PATTERN =
+  /\b(consult|invoke|this skill|you must|you should|before responding|each request)\b/i;
+
+/**
+ * The JSON tool-call shape requires both a `"name"` key with a string value and a
+ * sibling `"arguments"` key in the same fenced block, so a manifest like package.json
+ * (which has a `"name"` key but no `"arguments"` key) does not fire.
+ */
 const TOOL_CALL_NAME_PATTERN = /"name"\s*:\s*".+"/;
-const TOOL_CALL_ARGUMENTS_PATTERN = /arguments/i;
-const CURL_OR_WGET_PIPE_SHELL_PATTERN = /\b(curl|wget)\b.*\|\s*(sh|bash)\b/i;
+const TOOL_CALL_ARGUMENTS_KEY_PATTERN = /"arguments"\s*:/;
+
+/** A download piped into a shell, optionally elevated with `sudo`, across common shells. */
+const CURL_OR_WGET_PIPE_SHELL_PATTERN =
+  /\b(curl|wget)\b.*\|\s*(sudo\s+)?(sh|bash|zsh|dash|ksh|fish)\b/i;
+
+/** A base64-decoded payload piped straight into a shell. */
 const BASE64_DECODE_PIPE_SHELL_PATTERN =
   /base64\s+(-d|--decode)\b.*\|\s*(sh|bash)\b/i;
 
@@ -72,7 +91,10 @@ function detectLinePatterns(line: string): string[] {
     patterns.push("role-marker");
   }
 
-  if (ALWAYS_KEYWORD_PATTERN.test(line) && INVOKE_VERB_PATTERN.test(line)) {
+  if (
+    ALWAYS_KEYWORD_PATTERN.test(line) &&
+    ASSISTANT_DIRECTED_CUE_PATTERN.test(line)
+  ) {
     patterns.push("always-invoke");
   }
 
@@ -91,11 +113,11 @@ function detectToolCallShapeInFence(
   relativePath: string,
   fenceLines: FenceLine[],
 ): InjectionFinding[] {
-  const blockMentionsArguments = fenceLines.some(({ line }) =>
-    TOOL_CALL_ARGUMENTS_PATTERN.test(line),
+  const blockHasArgumentsKey = fenceLines.some(({ line }) =>
+    TOOL_CALL_ARGUMENTS_KEY_PATTERN.test(line),
   );
 
-  if (!blockMentionsArguments) return [];
+  if (!blockHasArgumentsKey) return [];
 
   return fenceLines
     .filter(({ line }) => TOOL_CALL_NAME_PATTERN.test(line))

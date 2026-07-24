@@ -1,32 +1,32 @@
 Output demo/das-demo.gif
 
 Set Shell "bash"
-Set FontSize 16
-Set Width 1240
-Set Height 940
+Set FontSize 15
+Set Width 1280
+Set Height 1000
 Set Padding 24
 Set Theme "Dracula"
-Set TypingSpeed 45ms
+Set TypingSpeed 40ms
 
 Hide
 Type "export DEMO=$(mktemp -d) && export HOME=$DEMO && clear"
 Enter
 Show
 
-Type "# das add walks you through an interactive wizard"
+Type "# point das at a whole org handbook (26 files across onboarding, services, runbooks, security...)"
 Enter
-Type "das add ./demo/sample-docs --token-budget 900"
+Type "das add ./demo/sample-docs --token-budget 500"
 Enter
-Sleep 3s
+Sleep 4500ms
 
 Enter
 Sleep 1500ms
 
-Type "widget-sdk"
+Type "acme-handbook"
 Enter
 Sleep 1500ms
 
-Type "Widget SDK reference"
+Type "Acme engineering handbook"
 Enter
 Sleep 1500ms
 
@@ -34,9 +34,15 @@ Type "n"
 Enter
 Sleep 3s
 
-Type "# the big API reference was sliced into an index plus one file per method"
+Type "# das mapped it into a token-bounded skill: a table of contents plus a browsable tree"
 Enter
-Type "ls ~/.claude/skills/widget-sdk/resources/api-reference/"
+Type "ls ~/.claude/skills/acme-handbook/resources/"
+Enter
+Sleep 3s
+
+Type "# each big area drills down into an index plus one file per page"
+Enter
+Type "ls ~/.claude/skills/acme-handbook/resources/services/"
 Enter
 Sleep 3500ms
 

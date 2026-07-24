@@ -5,7 +5,7 @@ import type * as Preset from "@docusaurus/preset-classic";
 const config: Config = {
   title: "das",
   tagline: "Documentation as a Skill",
-  favicon: "img/favicon.ico",
+  favicon: "img/favicon.png",
 
   future: {
     v4: true,
@@ -55,6 +55,11 @@ const config: Config = {
     },
     navbar: {
       title: "das",
+      logo: {
+        alt: "codewizwit",
+        src: "img/logo.png",
+        srcDark: "img/logo-dark.png",
+      },
       items: [
         {
           type: "docSidebar",
@@ -102,8 +107,17 @@ const config: Config = {
             },
           ],
         },
+        {
+          title: "codewizwit",
+          items: [
+            {
+              label: "GitHub org",
+              href: "https://github.com/codewizwit",
+            },
+          ],
+        },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} das-cli. MIT licensed.`,
+      copyright: `Built by <a href="https://github.com/codewizwit">codewizwit</a>. MIT licensed. © ${new Date().getFullYear()}`,
     },
     prism: {
       theme: prismThemes.github,

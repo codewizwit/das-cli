@@ -1,43 +1,44 @@
 Output demo/das-demo.gif
 
 Set Shell "bash"
-Set FontSize 17
+Set FontSize 16
 Set Width 1240
-Set Height 800
+Set Height 940
 Set Padding 24
 Set Theme "Dracula"
-Set TypingSpeed 40ms
+Set TypingSpeed 45ms
 
 Hide
 Type "export DEMO=$(mktemp -d) && export HOME=$DEMO && clear"
 Enter
 Show
 
-Type "das --version"
+Type "# das add walks you through an interactive wizard"
+Enter
+Type "das add ./demo/sample-docs --token-budget 900"
+Enter
+Sleep 3s
+
 Enter
 Sleep 1500ms
 
-Type "# point das at a docs folder; it slices it into a token-bounded Claude Code skill"
+Type "widget-sdk"
 Enter
-Type "das add ./demo/sample-docs --yes --scope personal --no-hook"
-Enter
-Sleep 3500ms
+Sleep 1500ms
 
-Type "# the big API reference was split into an index plus one file per method"
+Type "Widget SDK reference"
 Enter
-Type "ls ~/.claude/skills/sample-docs/resources/api-reference/"
-Enter
-Sleep 3500ms
+Sleep 1500ms
 
-Type "# SKILL.md is the token-bounded table of contents Claude loads first"
-Enter
-Type "sed -n '6,11p' ~/.claude/skills/sample-docs/SKILL.md"
-Enter
-Sleep 4s
-
-Type "das list"
+Type "n"
 Enter
 Sleep 3s
+
+Type "# the big API reference was sliced into an index plus one file per method"
+Enter
+Type "ls ~/.claude/skills/widget-sdk/resources/api-reference/"
+Enter
+Sleep 3500ms
 
 Hide
 Type "rm -rf $DEMO"

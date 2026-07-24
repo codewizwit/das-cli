@@ -28,4 +28,14 @@ describe("das bin entry point wiring", () => {
       return error instanceof CommanderError && error.exitCode !== 0;
     });
   });
+
+  it("throws a zero-exit CommanderError for --version", async () => {
+    const program = createProgram();
+
+    await expect(
+      program.parseAsync(["node", "das", "--version"]),
+    ).rejects.toSatisfy((error: unknown) => {
+      return error instanceof CommanderError && error.exitCode === 0;
+    });
+  });
 });

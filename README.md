@@ -22,12 +22,29 @@ Your documentation site (Docusaurus, MkDocs, Starlight, or plain Markdown) stays
 
 ## Install
 
+Run it once, no install, with `npx`:
+
+```
+npx @codewizwit/das-cli add https://github.com/org/repo
+```
+
+Or install the `das` binary globally:
+
+```
+npm install -g @codewizwit/das-cli
+das add https://github.com/org/repo
+```
+
+Requires Node >= 20.12.0.
+
+**Develop:** to run `das` from a checkout of this repo instead of the published package:
+
 ```
 pnpm install
 pnpm build
 ```
 
-This builds the `das` binary declared in `package.json` (`bin.das` -> `dist/bin/das.js`). Requires Node >= 20.12.0.
+This builds the `das` binary declared in `package.json` (`bin.das` -> `dist/bin/das.js`).
 
 ## Quickstart
 
@@ -67,7 +84,7 @@ resolve -> slice -> render -> write
 ```
 
 1. **Resolve.** A GitHub URL, file, folder, or project root is normalized into an ordered set of Markdown files. Frontmatter (`title`, `sidebar_position`, `draft`) and MDX constructs (imports, tabs, admonitions, self-closing components) are parsed and normalized.
-2. **Slice.** The fileset becomes a normalized heading tree, sized bottom-up. A subtree that fits the token budget is inlined as one file; a subtree that doesn't becomes an index whose table of contents links to its children, recursing. Chains of single-child nodes collapse into one level, and an oversized table of contents is chunked into grouped index files, deterministically, so the whole tree stays navigable. Every emitted file is within budget except an atomic oversized leaf or index, which is emitted whole and flagged in the generation report rather than silently truncated.
+2. **Slice.** The fileset becomes a normalized heading tree, sized bottom-up. A subtree that fits the token budget is inlined as one file; a subtree that doesn't becomes an index whose table of contents links to its children, recursing. Chains of single-child nodes collapse into one level, and an oversized table of contents is chunked into grouped index files, deterministically, so the whole tree stays navigable. Every emitted file is within budget except an atomic oversized leaf or index, which is emitted whole and surfaced as a warning when `das add` finishes, rather than silently truncated.
 3. **Render.** The plan becomes full file contents: `SKILL.md` with `name`/`description` frontmatter, resource files with a one-line untrusted-content frame, and linked tables of contents with one-line summaries.
 4. **Write.** The complete tree is built in a temp directory and swapped into place atomically, so a crash or timeout mid-generation never leaves a half-written skill on disk.
 
@@ -89,4 +106,4 @@ The manifest cache is protected by an advisory lockfile so two `das` processes n
 
 ## Status
 
-This is a v0.0.0, single-maintainer build. `das add`, `refresh`, `list`, `remove`, `doctor`, and `hook install` are implemented and covered by the test suite (`pnpm test`). A `src/bin/das.ts` entry point wiring `createProgram()` to `process.argv` still needs to be added before `pnpm build` has anything to build. Treat the command surface documented above as the tested contract; publishing it as an installable binary is a separate, pending step.
+This is a single-maintainer build. `das add`, `refresh`, `list`, `remove`, `doctor`, and `hook install` are implemented and covered by the test suite (`pnpm test`). `pnpm build` produces the `das` binary, and it is published to npm as [`@codewizwit/das-cli`](https://www.npmjs.com/package/@codewizwit/das-cli).

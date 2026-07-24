@@ -331,6 +331,15 @@ function buildDasJsonEmitFile(skillDir: string, data: DasJson): EmitFile {
   };
 }
 
+function buildOversizedWarning(plan: EmissionPlan): string | undefined {
+  const paths = [...plan.oversized, ...plan.oversizedIndexes];
+  if (paths.length === 0) {
+    return undefined;
+  }
+
+  return `das: warning: ${String(paths.length)} generated file(s) exceed the token budget and were emitted whole: ${paths.join(", ")}`;
+}
+
 function printPreview(
   deps: RunAddDeps,
   preview: {
@@ -578,6 +587,10 @@ export async function runAdd(
   deps.stdout(
     `das: created skill "${name}" at ${skillDir} (${String(dasJsonData.generatedFiles.length)} files)`,
   );
+  const oversizedWarning = buildOversizedWarning(plan);
+  if (oversizedWarning !== undefined) {
+    deps.stdout(oversizedWarning);
+  }
   if (hookError !== undefined) {
     deps.stdout(`das: could not install the SessionStart hook: ${hookError}`);
   } else {

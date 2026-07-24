@@ -148,7 +148,7 @@ resources/
       monitoring.md
       webhooks.md
   api-reference.md                (oversized: single huge table, emitted
-                                    whole, listed in the generation report)
+                                    whole, warned about when das add finishes)
 ```
 
 Grouping (`group-1`, `group-2`, ...) only appears when a single index's table of contents itself would not fit the budget; most skills never need it. Single-child chains collapse before this stage runs (`collapseSingleChildChains`, wired into `buildSizedTree`), so a folder containing exactly one file never produces a redundant nesting level. Every path this stage decides is later `path.resolve`d and containment-checked in `writeSkillTransactional` before anything is written, so a malicious or malformed node name can plan a path but never write outside the skill directory.

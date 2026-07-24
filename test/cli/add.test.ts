@@ -682,6 +682,39 @@ describe("runAdd", () => {
     );
   });
 
+  it("prints a warning naming oversized files when the plan flags them", async () => {
+    const { deps } = createFakeDeps();
+    const stdout = vi.fn();
+    deps.stdout = stdout;
+    deps.planEmission = vi.fn(
+      (_root: DocNode, _opts: { tokenBudget: number }) => ({
+        ...fakePlanFor(),
+        oversized: ["resources/api-reference.md"],
+        oversizedIndexes: ["resources/guides/index.md"],
+      }),
+    );
+
+    const outcome = await runAdd(baseArgs(), deps);
+
+    expect(outcome.status).toBe("written");
+    expect(stdout).toHaveBeenCalledWith(
+      "das: warning: 2 generated file(s) exceed the token budget and were emitted whole: resources/api-reference.md, resources/guides/index.md",
+    );
+  });
+
+  it("prints no oversized warning when the plan has nothing flagged", async () => {
+    const { deps } = createFakeDeps();
+    const stdout = vi.fn();
+    deps.stdout = stdout;
+
+    await runAdd(baseArgs(), deps);
+
+    const warningCalls = (stdout.mock.calls as [string][]).filter(([line]) =>
+      line.includes("exceed the token budget"),
+    );
+    expect(warningCalls).toHaveLength(0);
+  });
+
   it("honors explicit --scope/--name/--description flags without prompting, even without --yes", async () => {
     const { deps, spies } = createFakeDeps({
       projectRoot: FAKE_PROJECT_ROOT,

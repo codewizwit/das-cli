@@ -24,6 +24,7 @@ function validDasJson(): DasJson {
     pinnedSha: "a".repeat(40),
     sourceHash: `sha256:${"b".repeat(64)}`,
     tokenBudget: 4000,
+    includeLarge: false,
     checkIntervalHours: 24,
     lastRefresh: "2026-07-22T12:00:00Z",
     generatedFiles: ["SKILL.md", "reference/topic.md"],
@@ -281,6 +282,23 @@ describe("das-json", () => {
     await writeDasJson(skillDir, data);
     const result = await readDasJson(skillDir);
     expect(result.checkIntervalHours).toBe(0);
+  });
+
+  it("round-trips includeLarge: true", async () => {
+    const data: DasJson = { ...validDasJson(), includeLarge: true };
+    await writeDasJson(skillDir, data);
+    const result = await readDasJson(skillDir);
+    expect(result.includeLarge).toBe(true);
+  });
+
+  it("rejects a non-boolean includeLarge", async () => {
+    const dataWithBadIncludeLarge = { ...validDasJson(), includeLarge: "yes" };
+    await writeFile(
+      join(skillDir, "das.json"),
+      JSON.stringify(dataWithBadIncludeLarge),
+      "utf-8",
+    );
+    await expect(readDasJson(skillDir)).rejects.toThrow(InvalidDasJsonError);
   });
 
   it("accepts a null pinnedSha and a null trackedRef", async () => {

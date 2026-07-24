@@ -73,6 +73,7 @@ function validDasJson(): DasJson {
     pinnedSha: "a".repeat(40),
     sourceHash: `sha256:${"b".repeat(64)}`,
     tokenBudget: 4000,
+    includeLarge: false,
     checkIntervalHours: 24,
     lastRefresh: "2026-07-22T12:00:00Z",
     generatedFiles: ["SKILL.md", "reference/topic.md"],

@@ -97,6 +97,7 @@ export const dasJsonSchema = z
     pinnedSha: z.union([z.string().regex(shaHexPattern), z.null()]),
     sourceHash: z.string().regex(sourceHashPattern),
     tokenBudget: z.number().int().min(500).max(100000),
+    includeLarge: z.boolean(),
     checkIntervalHours: z.number().min(0),
     lastRefresh: z.string().datetime({ offset: true }),
     generatedFiles: z.array(generatedFilePathSchema).min(1),

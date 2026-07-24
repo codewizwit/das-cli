@@ -31,6 +31,7 @@ function validDasJson(name: string): DasJson {
     pinnedSha: "a".repeat(40),
     sourceHash: `sha256:${"b".repeat(64)}`,
     tokenBudget: 4000,
+    includeLarge: false,
     checkIntervalHours: 24,
     lastRefresh: "2026-07-22T12:00:00Z",
     generatedFiles: ["SKILL.md"],
@@ -217,31 +218,33 @@ describe("assertManagedPath", () => {
   it("accepts a personal skill path under home", () => {
     const skillPath = join(home, ".claude", "skills", "widget-docs");
 
-    expect(() => { assertManagedPath(skillPath, { home }); }).not.toThrow();
+    expect(() => {
+      assertManagedPath(skillPath, { home });
+    }).not.toThrow();
   });
 
   it("accepts a project skill path under projectRoot", () => {
     const skillPath = join(projectRoot, ".claude", "skills", "widget-docs");
 
-    expect(() =>
-      { assertManagedPath(skillPath, { home, projectRoot }); },
-    ).not.toThrow();
+    expect(() => {
+      assertManagedPath(skillPath, { home, projectRoot });
+    }).not.toThrow();
   });
 
   it("rejects a path outside .claude/skills entirely", () => {
     const skillPath = join(home, "Documents", "widget-docs");
 
-    expect(() => { assertManagedPath(skillPath, { home }); }).toThrow(
-      UnmanagedPathError,
-    );
+    expect(() => {
+      assertManagedPath(skillPath, { home });
+    }).toThrow(UnmanagedPathError);
   });
 
   it("rejects a sibling directory that merely shares the skills prefix", () => {
     const skillPath = join(home, ".claude", "skills-evil", "widget-docs");
 
-    expect(() => { assertManagedPath(skillPath, { home }); }).toThrow(
-      UnmanagedPathError,
-    );
+    expect(() => {
+      assertManagedPath(skillPath, { home });
+    }).toThrow(UnmanagedPathError);
   });
 
   it("rejects a path that escapes the skills directory via ..", () => {
@@ -256,18 +259,18 @@ describe("assertManagedPath", () => {
       "etc",
     );
 
-    expect(() => { assertManagedPath(skillPath, { home }); }).toThrow(
-      UnmanagedPathError,
-    );
+    expect(() => {
+      assertManagedPath(skillPath, { home });
+    }).toThrow(UnmanagedPathError);
   });
 
   it("uses a separator boundary so a longer sibling name does not pass", () => {
     const skillsRootParent = join(home, ".claude");
     const skillPath = join(skillsRootParent, "skillsX", "widget-docs");
 
-    expect(() => { assertManagedPath(skillPath, { home }); }).toThrow(
-      UnmanagedPathError,
-    );
+    expect(() => {
+      assertManagedPath(skillPath, { home });
+    }).toThrow(UnmanagedPathError);
   });
 });
 

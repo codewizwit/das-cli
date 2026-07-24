@@ -7,7 +7,7 @@ import type { ManifestEntry } from "../state/manifest.js";
 import type { DocFile, DocNode, EmitFile, SourceRef } from "../types.js";
 
 const LOCAL_REGENERATION_CAP = 3;
-const INCLUDE_LARGE_DEFAULT = false;
+const DEFAULT_PER_SKILL_TIMEOUT_MS = 20000;
 
 /** The result of attempting to refresh a single skill. */
 export interface RefreshOutcome {
@@ -75,6 +75,40 @@ export interface RefreshDeps {
   now: () => number;
   /** Optional injection-scan hook run over a freshly resolved fileset before it is regenerated. */
   scanChanged?: (files: DocFile[]) => Promise<void> | void;
+  /**
+   * Wait for the given duration, in milliseconds, used to bound per-skill work in
+   * {@link runHookRefresh}. Defaults to a real `setTimeout`-based wait when omitted;
+   * tests inject an immediately-resolving fake so a simulated hang never actually waits.
+   */
+  delay?: (ms: number) => Promise<void>;
+}
+
+function defaultDelay(ms: number): Promise<void> {
+  return new Promise((resolveDelay) => {
+    setTimeout(resolveDelay, ms);
+  });
+}
+
+class PerSkillTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(
+      `Skill refresh exceeded the per-skill timeout of ${String(timeoutMs)}ms`,
+    );
+    this.name = "PerSkillTimeoutError";
+  }
+}
+
+async function withPerSkillTimeout<T>(
+  work: () => Promise<T>,
+  timeoutMs: number,
+  delay: (ms: number) => Promise<void>,
+): Promise<T> {
+  return Promise.race([
+    work(),
+    delay(timeoutMs).then((): never => {
+      throw new PerSkillTimeoutError(timeoutMs);
+    }),
+  ]);
 }
 
 type GithubSource = Extract<DasJson["source"], { type: "github" }>;
@@ -88,7 +122,7 @@ function hashParamsFor(dasJson: DasJson): HashParams {
   return {
     slicerVersion: SLICER_VERSION,
     tokenBudget: dasJson.tokenBudget,
-    includeLarge: INCLUDE_LARGE_DEFAULT,
+    includeLarge: dasJson.includeLarge,
   };
 }
 
@@ -152,7 +186,7 @@ async function evaluateLocalSource(
 
   try {
     files = await deps.resolveSource(dasJson.source, {
-      includeLarge: INCLUDE_LARGE_DEFAULT,
+      includeLarge: dasJson.includeLarge,
     });
   } catch {
     return { kind: "stale" };
@@ -201,6 +235,14 @@ async function refreshLocalSkill(
   return { status: "regenerated" };
 }
 
+/**
+ * Check a remote skill's tracked ref against its pinned sha, without ever cloning.
+ *
+ * A moved sha deliberately does not bump `lastRefresh` or otherwise touch
+ * das.json: the pending update must keep being reported on every subsequent
+ * hook run until it is resolved via an explicit `--update`, rather than going
+ * silent after being reported once.
+ */
 async function checkRemoteForUpdate(
   entry: ManifestEntry,
   dasJson: DasJson,
@@ -249,7 +291,7 @@ async function refreshRemoteWithUpdate(
 
   try {
     files = await deps.resolveSource(dasJson.source, {
-      includeLarge: INCLUDE_LARGE_DEFAULT,
+      includeLarge: dasJson.includeLarge,
       pinnedSha: sha,
     });
   } catch {
@@ -374,6 +416,49 @@ interface PendingLocalRegeneration {
   sourceHash: string;
 }
 
+type EntryHookResult =
+  | { kind: "none" }
+  | { kind: "line"; line: string }
+  | { kind: "pending-local"; pending: PendingLocalRegeneration };
+
+async function evaluateEntryForHook(
+  entry: ManifestEntry,
+  deps: RefreshDeps,
+): Promise<EntryHookResult> {
+  const dasJson = await deps.readDasJson(entry.skillPath);
+
+  if (dasJson.source.type === "github") {
+    const outcome = await refreshRemoteSkill(
+      entry,
+      dasJson,
+      { kind: "hook" },
+      deps,
+    );
+
+    if (outcome.status === "update-available" && outcome.detail) {
+      return { kind: "line", line: outcome.detail };
+    }
+
+    return { kind: "none" };
+  }
+
+  const evaluation = await evaluateLocalSource(dasJson, false, deps);
+
+  if (evaluation.kind === "needs-regeneration") {
+    return {
+      kind: "pending-local",
+      pending: {
+        entry,
+        dasJson,
+        files: evaluation.files,
+        sourceHash: evaluation.sourceHash,
+      },
+    };
+  }
+
+  return { kind: "none" };
+}
+
 /**
  * Run the bounded, hook-mode refresh across a set of registered skills.
  *
@@ -382,20 +467,26 @@ interface PendingLocalRegeneration {
  * skills only ever run the `ls-remote` check (never a cap, never a clone).
  * Local skills whose fileset hash has changed are regenerated oldest
  * `lastRefresh` first, capped at 3 per run; any remainder is left untouched
- * for a future run rather than regenerated immediately. A single skill
- * erroring never stops the rest: the returned lines cover only skills with an
- * upstream update or a completed local regeneration, one line each.
+ * for a future run rather than regenerated immediately. Every per-skill step
+ * (the initial check and, separately, a capped regeneration) is bounded by
+ * `perSkillTimeoutMs`: a skill that hangs is treated as stale, produces no
+ * line, and never stalls or fails the rest of the run. A single skill
+ * erroring never stops the rest either: the returned lines cover only skills
+ * with an upstream update or a completed local regeneration, one line each.
  *
  * @param entries - The manifest entries to consider for this hook run
  * @param currentDirectory - The directory the hook is running from, used to scope project skills
  * @param deps - The injected effectful functions this refresh runs through
+ * @param perSkillTimeoutMs - The maximum time allotted to each skill's per-step work, in milliseconds
  * @returns One line per skill with an upstream update or a completed regeneration, in the order decided
  */
 export async function runHookRefresh(
   entries: ManifestEntry[],
   currentDirectory: string,
   deps: RefreshDeps,
+  perSkillTimeoutMs: number = DEFAULT_PER_SKILL_TIMEOUT_MS,
 ): Promise<string[]> {
+  const delay = deps.delay ?? defaultDelay;
   const lines: string[] = [];
   const pendingLocalRegenerations: PendingLocalRegeneration[] = [];
 
@@ -405,32 +496,16 @@ export async function runHookRefresh(
     }
 
     try {
-      const dasJson = await deps.readDasJson(entry.skillPath);
+      const result = await withPerSkillTimeout(
+        () => evaluateEntryForHook(entry, deps),
+        perSkillTimeoutMs,
+        delay,
+      );
 
-      if (dasJson.source.type === "github") {
-        const outcome = await refreshRemoteSkill(
-          entry,
-          dasJson,
-          { kind: "hook" },
-          deps,
-        );
-
-        if (outcome.status === "update-available" && outcome.detail) {
-          lines.push(outcome.detail);
-        }
-
-        continue;
-      }
-
-      const evaluation = await evaluateLocalSource(dasJson, false, deps);
-
-      if (evaluation.kind === "needs-regeneration") {
-        pendingLocalRegenerations.push({
-          entry,
-          dasJson,
-          files: evaluation.files,
-          sourceHash: evaluation.sourceHash,
-        });
+      if (result.kind === "line") {
+        lines.push(result.line);
+      } else if (result.kind === "pending-local") {
+        pendingLocalRegenerations.push(result.pending);
       }
     } catch {
       continue;
@@ -448,15 +523,20 @@ export async function runHookRefresh(
     LOCAL_REGENERATION_CAP,
   )) {
     try {
-      await regenerateSkill(
-        pending.entry,
-        pending.dasJson,
-        {
-          files: pending.files,
-          sourceHash: pending.sourceHash,
-          pinnedSha: pending.dasJson.pinnedSha,
-        },
-        deps,
+      await withPerSkillTimeout(
+        () =>
+          regenerateSkill(
+            pending.entry,
+            pending.dasJson,
+            {
+              files: pending.files,
+              sourceHash: pending.sourceHash,
+              pinnedSha: pending.dasJson.pinnedSha,
+            },
+            deps,
+          ),
+        perSkillTimeoutMs,
+        delay,
       );
       lines.push(`das: ${pending.dasJson.name} regenerated (source changed)`);
     } catch {

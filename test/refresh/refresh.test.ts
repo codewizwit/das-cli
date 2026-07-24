@@ -22,6 +22,7 @@ function localDasJson(overrides: Partial<DasJson> = {}): DasJson {
     pinnedSha: null,
     sourceHash: `sha256:${"a".repeat(64)}`,
     tokenBudget: 4000,
+    includeLarge: false,
     checkIntervalHours: 24,
     lastRefresh: "2026-07-20T12:00:00.000Z",
     generatedFiles: ["SKILL.md"],
@@ -43,6 +44,7 @@ function remoteDasJson(overrides: Partial<DasJson> = {}): DasJson {
     pinnedSha: "a".repeat(40),
     sourceHash: `sha256:${"b".repeat(64)}`,
     tokenBudget: 4000,
+    includeLarge: false,
     checkIntervalHours: 24,
     lastRefresh: "2026-07-20T12:00:00.000Z",
     generatedFiles: ["SKILL.md"],
@@ -86,6 +88,9 @@ interface FakeDepsOptions {
   resolvedFiles?: DocFile[];
   lsRemoteResult?: string | Error;
   resolveSourceError?: Error;
+  hangOnSkillPath?: string;
+  failWriteSkillTransactionalFor?: string;
+  delay?: (ms: number) => Promise<void>;
 }
 
 function createFakeDeps(options: FakeDepsOptions = {}): {
@@ -96,6 +101,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     writeSkillTransactional: ReturnType<typeof vi.fn>;
     writeDasJson: ReturnType<typeof vi.fn>;
     hashFileset: ReturnType<typeof vi.fn>;
+    readDasJson: ReturnType<typeof vi.fn>;
   };
   writtenDasJson: Map<string, DasJson>;
 } {
@@ -123,9 +129,22 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
   const renderSkillPlan = vi.fn(
     (_plan: EmissionPlan, _context: RenderContext) => [emitFile],
   );
-  const writeSkillTransactional = vi.fn(async () => Promise.resolve());
+
+  const writeSkillTransactional = vi.fn((skillDir: string) => {
+    if (options.failWriteSkillTransactionalFor === skillDir) {
+      return Promise.reject(
+        new Error(`simulated write failure for ${skillDir}`),
+      );
+    }
+    return Promise.resolve();
+  });
 
   const readDasJson = vi.fn((skillPath: string) => {
+    if (options.hangOnSkillPath === skillPath) {
+      return new Promise<DasJson>(() => {
+        return undefined;
+      });
+    }
     const found = dasJsonByPath.get(skillPath);
     if (!found) {
       throw new Error(`no fake das.json for ${skillPath}`);
@@ -156,6 +175,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
     writeDasJson,
     hashFileset,
     now,
+    ...(options.delay ? { delay: options.delay } : {}),
   };
 
   return {
@@ -166,6 +186,7 @@ function createFakeDeps(options: FakeDepsOptions = {}): {
       writeSkillTransactional,
       writeDasJson,
       hashFileset,
+      readDasJson,
     },
     writtenDasJson,
   };
@@ -250,6 +271,32 @@ describe("refreshSkill — local source", () => {
     expect(outcome).toEqual({ status: "stale" });
     expect(spies.writeSkillTransactional).not.toHaveBeenCalled();
   });
+
+  it("resolves and hashes with includeLarge: true when das.json requests it, without spurious regeneration", async () => {
+    const dasJson = localDasJson({ includeLarge: true });
+    const skillPath = "/home/user/.claude/skills/widget-docs";
+    const { deps, spies } = createFakeDeps({
+      storedFilesHash: dasJson.sourceHash,
+      dasJsonByPath: new Map([[skillPath, dasJson]]),
+    });
+
+    const outcome = await refreshSkill(
+      manifestEntryFor(dasJson, skillPath),
+      { kind: "interactive" },
+      deps,
+    );
+
+    expect(outcome).toEqual({ status: "unchanged" });
+    expect(spies.writeSkillTransactional).not.toHaveBeenCalled();
+    expect(spies.resolveSource.mock.calls[0]?.[1]).toEqual({
+      includeLarge: true,
+    });
+    expect(spies.hashFileset.mock.calls[0]?.[1]).toEqual({
+      slicerVersion: SLICER_VERSION,
+      tokenBudget: dasJson.tokenBudget,
+      includeLarge: true,
+    });
+  });
 });
 
 describe("refreshSkill — remote source, hook mode", () => {
@@ -299,7 +346,7 @@ describe("refreshSkill — remote source, hook mode", () => {
     );
   });
 
-  it("reports update-available with the exact command line when the sha has moved", async () => {
+  it("reports update-available with the exact command line when the sha has moved, touching nothing", async () => {
     const dasJson = remoteDasJson({
       lastRefresh: new Date(FIXED_NOW_MS - 48 * 60 * 60 * 1000).toISOString(),
       checkIntervalHours: 24,
@@ -323,6 +370,7 @@ describe("refreshSkill — remote source, hook mode", () => {
         "das: prisma-docs has upstream updates; run 'das refresh prisma-docs --update'",
     });
     expect(spies.writeSkillTransactional).not.toHaveBeenCalled();
+    expect(spies.writeDasJson).not.toHaveBeenCalled();
   });
 
   it("reports stale when ls-remote fails", async () => {
@@ -378,9 +426,10 @@ describe("runHookRefresh", () => {
   function localEntryAndDasJson(
     name: string,
     lastRefresh: string,
+    overrides: Partial<DasJson> = {},
   ): { entry: ManifestEntry; dasJson: DasJson; skillPath: string } {
     const skillPath = `/home/user/.claude/skills/${name}`;
-    const dasJson = localDasJson({ name, lastRefresh });
+    const dasJson = localDasJson({ name, lastRefresh, ...overrides });
     return { entry: manifestEntryFor(dasJson, skillPath), dasJson, skillPath };
   }
 
@@ -452,16 +501,56 @@ describe("runHookRefresh", () => {
     expect(deps.readDasJson).toHaveBeenCalledWith(personalSkillPath);
   });
 
-  it("never throws when one skill errors, and still processes the others", async () => {
-    const brokenSkillPath = "/home/user/.claude/skills/broken-skill";
-    const workingDasJson = localDasJson({
-      name: "working-skill",
+  it("includes a project skill whose skillPath is under currentDirectory", async () => {
+    const projectSkillPath = "/a/project/.claude/skills/project-skill";
+    const projectDasJson = localDasJson({
+      name: "project-skill",
       sourceHash:
         "sha256:matches0000000000000000000000000000000000000000000000000000",
     });
-    const workingSkillPath = "/home/user/.claude/skills/working-skill";
     const entries: ManifestEntry[] = [
-      manifestEntryFor(workingDasJson, workingSkillPath),
+      {
+        ...manifestEntryFor(projectDasJson, projectSkillPath),
+        scope: "project",
+      },
+    ];
+    const { deps } = createFakeDeps({
+      dasJsonByPath: new Map([[projectSkillPath, projectDasJson]]),
+      storedFilesHash:
+        "sha256:matches0000000000000000000000000000000000000000000000000000",
+    });
+
+    await runHookRefresh(entries, "/a/project", deps);
+
+    expect(deps.readDasJson).toHaveBeenCalledWith(projectSkillPath);
+  });
+
+  it("does not treat a sibling directory sharing a path prefix as under currentDirectory", async () => {
+    const siblingSkillPath = "/a/project-two/.claude/skills/sibling-skill";
+    const siblingDasJson = localDasJson({ name: "sibling-skill" });
+    const entries: ManifestEntry[] = [
+      {
+        ...manifestEntryFor(siblingDasJson, siblingSkillPath),
+        scope: "project",
+      },
+    ];
+    const { deps } = createFakeDeps({
+      dasJsonByPath: new Map([[siblingSkillPath, siblingDasJson]]),
+    });
+
+    await runHookRefresh(entries, "/a/project", deps);
+
+    expect(deps.readDasJson).not.toHaveBeenCalled();
+  });
+
+  it("never throws when one skill errors, and proves the working skill is still processed afterward", async () => {
+    const brokenSkillPath = "/home/user/.claude/skills/broken-skill";
+    const workingSkillPath = "/home/user/.claude/skills/working-skill";
+    const workingDasJson = localDasJson({
+      name: "working-skill",
+      lastRefresh: "2026-07-01T00:00:00.000Z",
+    });
+    const entries: ManifestEntry[] = [
       {
         name: "broken-skill",
         skillPath: brokenSkillPath,
@@ -469,15 +558,78 @@ describe("runHookRefresh", () => {
         lastCheck: null,
         updateAvailable: false,
       },
+      manifestEntryFor(workingDasJson, workingSkillPath),
     ];
     const { deps } = createFakeDeps({
       dasJsonByPath: new Map([[workingSkillPath, workingDasJson]]),
       storedFilesHash:
-        "sha256:matches0000000000000000000000000000000000000000000000000000",
+        "sha256:new-content-hash-0000000000000000000000000000000000000000",
     });
 
-    await expect(
-      runHookRefresh(entries, "/home/user", deps),
-    ).resolves.toBeInstanceOf(Array);
+    const lines = await runHookRefresh(entries, "/home/user", deps);
+
+    const readDasJsonCalls = vi
+      .mocked(deps.readDasJson)
+      .mock.calls.map((call) => call[0]);
+    expect(readDasJsonCalls).toEqual([brokenSkillPath, workingSkillPath]);
+    expect(lines).toEqual(["das: working-skill regenerated (source changed)"]);
+  });
+
+  it("treats a per-skill timeout as stale and still processes the other skills", async () => {
+    const hangingSkillPath = "/home/user/.claude/skills/hanging-skill";
+    const workingSkillPath = "/home/user/.claude/skills/working-skill";
+    const workingDasJson = localDasJson({ name: "working-skill" });
+    const entries: ManifestEntry[] = [
+      manifestEntryFor(
+        localDasJson({ name: "hanging-skill" }),
+        hangingSkillPath,
+      ),
+      manifestEntryFor(workingDasJson, workingSkillPath),
+    ];
+    const { deps } = createFakeDeps({
+      dasJsonByPath: new Map([[workingSkillPath, workingDasJson]]),
+      storedFilesHash: workingDasJson.sourceHash,
+      hangOnSkillPath: hangingSkillPath,
+      delay: () => Promise.resolve(),
+    });
+
+    const lines = await runHookRefresh(entries, "/home/user", deps, 5);
+
+    expect(lines).toEqual([]);
+    expect(deps.readDasJson).toHaveBeenCalledWith(workingSkillPath);
+  });
+
+  it("treats a mid-cap regeneration failure as stale and still regenerates the others", async () => {
+    const skillX = localEntryAndDasJson("skill-x", "2026-07-01T00:00:00.000Z");
+    const skillY = localEntryAndDasJson("skill-y", "2026-07-02T00:00:00.000Z");
+    const skillZ = localEntryAndDasJson("skill-z", "2026-07-03T00:00:00.000Z");
+    const dasJsonByPath = new Map(
+      [skillX, skillY, skillZ].map(({ skillPath, dasJson }) => [
+        skillPath,
+        dasJson,
+      ]),
+    );
+    const { deps, writtenDasJson } = createFakeDeps({
+      dasJsonByPath,
+      storedFilesHash:
+        "sha256:new-content-hash-0000000000000000000000000000000000000000",
+      failWriteSkillTransactionalFor: skillX.skillPath,
+    });
+
+    const lines = await runHookRefresh(
+      [skillX.entry, skillY.entry, skillZ.entry],
+      "/home/user",
+      deps,
+    );
+
+    expect(writtenDasJson.has(skillX.skillPath)).toBe(false);
+    expect(writtenDasJson.has(skillY.skillPath)).toBe(true);
+    expect(writtenDasJson.has(skillZ.skillPath)).toBe(true);
+    expect(lines.sort()).toEqual(
+      [
+        "das: skill-y regenerated (source changed)",
+        "das: skill-z regenerated (source changed)",
+      ].sort(),
+    );
   });
 });

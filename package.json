@@ -1,6 +1,6 @@
 {
   "name": "@codewizwit/das-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Documentation as a Skill: convert a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill.",
   "type": "module",
   "license": "MIT",
@@ -22,7 +22,8 @@
   ],
   "packageManager": "pnpm@10.18.2",
   "bin": {
-    "das": "dist/bin/das.js"
+    "das": "dist/bin/das.js",
+    "das-cli": "dist/bin/das.js"
   },
   "files": [
     "dist"

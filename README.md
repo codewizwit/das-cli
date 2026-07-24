@@ -28,14 +28,14 @@ Run it once, no install, with `npx`:
 npx @codewizwit/das-cli add https://github.com/org/repo
 ```
 
-Or install the `das` binary globally:
+Or install the binary globally:
 
 ```
 npm install -g @codewizwit/das-cli
 das add https://github.com/org/repo
 ```
 
-Requires Node >= 20.12.0.
+The package installs two equivalent commands, `das` and `das-cli`; use whichever you prefer. Requires Node >= 20.12.0.
 
 **Develop:** to run `das` from a checkout of this repo instead of the published package:
 

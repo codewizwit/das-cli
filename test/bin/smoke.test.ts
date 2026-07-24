@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { CommanderError } from "commander";
 import { describe, expect, it } from "vitest";
 import { createProgram } from "../../src/cli/index.js";
@@ -7,6 +9,18 @@ describe("das bin entry point wiring", () => {
     const program = createProgram();
 
     expect(program.name()).toBe("das");
+  });
+
+  it("declares both the das and das-cli bins pointing at the built entry", () => {
+    const packageJsonUrl = new URL("../../package.json", import.meta.url);
+    const packageJson = JSON.parse(
+      readFileSync(fileURLToPath(packageJsonUrl), "utf-8"),
+    ) as { bin: Record<string, string> };
+
+    expect(packageJson.bin).toEqual({
+      das: "dist/bin/das.js",
+      "das-cli": "dist/bin/das.js",
+    });
   });
 
   it("throws a zero-exit CommanderError for --help", async () => {

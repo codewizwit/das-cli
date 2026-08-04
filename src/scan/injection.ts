@@ -29,15 +29,16 @@ const ROLE_MARKER_PATTERN = /^(system|assistant|user):/i;
 
 /**
  * An always-invoke imperative aimed at the assistant requires both an always-cadence
- * word and a genuinely assistant- or skill-directed cue on the same line. Bare
- * `you must` / `you should` are excluded because they saturate ordinary documentation
- * prose ("you must always return an array", "you should always treat state as
- * immutable"); the cue must name the assistant's behaviour (consult, invoke, this
- * skill, before responding, each request) for the line to fire.
+ * word and a cue that unambiguously names the assistant's response behaviour on the
+ * same line. The cue set is deliberately narrow: bare `you must` / `you should`,
+ * `invoke`, `consult`, and `each request` were all removed because they saturate
+ * ordinary documentation prose ("you must always return an array", "prerenders on
+ * each request", "the model can invoke tools"). Only phrasing about the reply itself
+ * (this skill, before responding, before answering) fires.
  */
 const ALWAYS_KEYWORD_PATTERN = /\b(always|every time)\b/i;
 const ASSISTANT_DIRECTED_CUE_PATTERN =
-  /\b(consult|invoke|this skill|before responding|each request)\b/i;
+  /\b(this skill|before responding|before answering)\b/i;
 
 /**
  * The JSON tool-call shape requires both a `"name"` key with a string value and a
@@ -150,20 +151,44 @@ function detectToolCallShapeInFence(
     }));
 }
 
+/** Count the run of leading backtick characters on a trimmed line (4 for a four-backtick fence). */
+function leadingBacktickRun(trimmedLine: string): number {
+  let count = 0;
+  while (trimmedLine[count] === "`") {
+    count += 1;
+  }
+  return count;
+}
+
+/**
+ * Whether a trimmed line closes a fence opened with openFenceLength backticks.
+ *
+ * Per CommonMark a fenced block is closed only by a line of backticks alone (no info
+ * string) whose run is at least as long as the opener. This is what keeps a shorter
+ * inner fence from prematurely closing a longer outer fence, the variable-length
+ * nesting real MDX documentation uses.
+ */
+function closesFence(trimmedLine: string, openFenceLength: number): boolean {
+  return trimmedLine.length >= openFenceLength && /^`+$/.test(trimmedLine);
+}
+
 function scanFileForInjection(file: EmitFile): InjectionFinding[] {
   const findings: InjectionFinding[] = [];
   const lines = file.content.split("\n");
-  let insideFence = false;
+  let openFenceLength = 0;
   let fenceLines: FenceLine[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     const lineNumber = index + 1;
     const trimmedLine = line.trim();
+    const backtickRun = trimmedLine.startsWith("```")
+      ? leadingBacktickRun(trimmedLine)
+      : 0;
 
-    if (trimmedLine.startsWith("```")) {
-      if (!insideFence) {
-        const infoString = trimmedLine.slice(3).trim().toLowerCase();
+    if (openFenceLength === 0) {
+      if (backtickRun >= 3) {
+        const infoString = trimmedLine.slice(backtickRun).trim().toLowerCase();
         if (TOOL_CALL_FENCE_INFO_STRINGS.has(infoString)) {
           findings.push({
             relativePath: file.relativePath,
@@ -172,20 +197,20 @@ function scanFileForInjection(file: EmitFile): InjectionFinding[] {
             excerpt: capExcerpt(trimmedLine),
           });
         }
-        insideFence = true;
-        fenceLines = [];
-      } else {
-        findings.push(
-          ...detectToolCallShapeInFence(file.relativePath, fenceLines),
-        );
-        insideFence = false;
+        openFenceLength = backtickRun;
         fenceLines = [];
       }
-    } else if (insideFence) {
+    } else if (closesFence(trimmedLine, openFenceLength)) {
+      findings.push(
+        ...detectToolCallShapeInFence(file.relativePath, fenceLines),
+      );
+      openFenceLength = 0;
+      fenceLines = [];
+    } else {
       fenceLines.push({ lineNumber, line });
     }
 
-    for (const pattern of detectLinePatterns(line, insideFence)) {
+    for (const pattern of detectLinePatterns(line, openFenceLength !== 0)) {
       findings.push({
         relativePath: file.relativePath,
         line: lineNumber,
@@ -195,7 +220,7 @@ function scanFileForInjection(file: EmitFile): InjectionFinding[] {
     }
   }
 
-  if (insideFence) {
+  if (openFenceLength !== 0) {
     findings.push(...detectToolCallShapeInFence(file.relativePath, fenceLines));
   }
 

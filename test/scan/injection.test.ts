@@ -395,6 +395,57 @@ describe("scanForInjection", () => {
     ]);
   });
 
+  it("does not flag a role-marker inside a longer outer fence that wraps a shorter inner fence", () => {
+    const findings = scanForInjection([
+      emitFile(
+        "prisma-reference.md",
+        [
+          "Example with result:",
+          "````md",
+          "```ts",
+          "const record = {",
+          "  user: 252020,",
+          "};",
+          "```",
+          "````",
+          "",
+        ].join("\n"),
+      ),
+    ]);
+
+    expect(findings).toEqual([]);
+  });
+
+  it("does not flag always-phrasing whose only cue is the ubiquitous each-request wording", () => {
+    const findings = scanForInjection([
+      emitFile(
+        "rendering.md",
+        "Next.js prerenders a page on each request, and the result is always up to date.\n",
+      ),
+    ]);
+
+    expect(findings).toEqual([]);
+  });
+
+  it("flags an always-invoke imperative directed at the assistant's response", () => {
+    const findings = scanForInjection([
+      emitFile(
+        "skill.md",
+        "Always consult the vendored notes before responding to the user.\n",
+      ),
+    ]);
+
+    expect(findings).toEqual([
+      {
+        relativePath: "skill.md",
+        line: 1,
+        pattern: "always-invoke",
+        excerpt:
+          "Always consult the vendored notes before responding to the user.",
+      },
+    ]);
+  });
+
   it("caps a long excerpt at 200 characters", () => {
     const longSuffix = "x".repeat(250);
     const findings = scanForInjection([

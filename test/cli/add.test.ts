@@ -644,6 +644,29 @@ describe("runAdd", () => {
     expect(spies.saveManifest).not.toHaveBeenCalled();
   });
 
+  it("rejects a token budget below the minimum before resolving the source", async () => {
+    const { deps, spies } = createFakeDeps();
+
+    await expect(runAdd(baseArgs({ tokenBudget: 200 }), deps)).rejects.toThrow(
+      InvalidTokenBudgetError,
+    );
+
+    expect(spies.lsRemote).not.toHaveBeenCalled();
+    expect(spies.resolveSource).not.toHaveBeenCalled();
+    expect(spies.writeSkillTransactional).not.toHaveBeenCalled();
+    expect(spies.saveManifest).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token budget above the maximum before resolving the source", async () => {
+    const { deps, spies } = createFakeDeps();
+
+    await expect(
+      runAdd(baseArgs({ tokenBudget: 200_000 }), deps),
+    ).rejects.toThrow(InvalidTokenBudgetError);
+
+    expect(spies.resolveSource).not.toHaveBeenCalled();
+  });
+
   it("persists the resolved absolute path for a relative local source", async () => {
     const { deps, spies } = createFakeDeps();
 

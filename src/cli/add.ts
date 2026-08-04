@@ -2,6 +2,8 @@ import { basename, join, resolve } from "node:path";
 import type { ParsedGithubUrl } from "../resolver/github-url.js";
 import {
   InvalidDasJsonError,
+  MAX_TOKEN_BUDGET,
+  MIN_TOKEN_BUDGET,
   SLICER_VERSION,
   dasJsonSchema,
   type DasJson,
@@ -164,11 +166,11 @@ export class InvalidSkillNameError extends Error {
   }
 }
 
-/** Thrown when `--token-budget` is not a positive integer. */
+/** Thrown when `--token-budget` is not an integer within the accepted range. */
 export class InvalidTokenBudgetError extends Error {
   constructor(value: unknown) {
     super(
-      `Invalid token budget: ${String(value)}. Must be a positive integer.`,
+      `Invalid token budget: ${String(value)}. Must be an integer between ${String(MIN_TOKEN_BUDGET)} and ${String(MAX_TOKEN_BUDGET)}.`,
     );
     this.name = "InvalidTokenBudgetError";
   }
@@ -185,7 +187,11 @@ function resolveTokenBudget(rawTokenBudget: number | undefined): number {
     return DEFAULT_TOKEN_BUDGET;
   }
 
-  if (!Number.isInteger(rawTokenBudget) || rawTokenBudget <= 0) {
+  if (
+    !Number.isInteger(rawTokenBudget) ||
+    rawTokenBudget < MIN_TOKEN_BUDGET ||
+    rawTokenBudget > MAX_TOKEN_BUDGET
+  ) {
     throw new InvalidTokenBudgetError(rawTokenBudget);
   }
 

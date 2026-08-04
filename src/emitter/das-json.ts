@@ -87,6 +87,12 @@ const generatedFilePathSchema = z
  * is untrusted input to later deletion, and a tampered file with extra keys must fail loud
  * instead of being quietly sanitized.
  */
+/** Smallest per-file token budget the slicer and manifest accept. */
+export const MIN_TOKEN_BUDGET = 500;
+
+/** Largest per-file token budget the slicer and manifest accept. */
+export const MAX_TOKEN_BUDGET = 100_000;
+
 export const dasJsonSchema = z
   .object({
     dasVersion: z.string().min(1).regex(semverLikePattern),
@@ -96,7 +102,7 @@ export const dasJsonSchema = z
     trackedRef: z.union([z.string(), z.null()]),
     pinnedSha: z.union([z.string().regex(shaHexPattern), z.null()]),
     sourceHash: z.string().regex(sourceHashPattern),
-    tokenBudget: z.number().int().min(500).max(100000),
+    tokenBudget: z.number().int().min(MIN_TOKEN_BUDGET).max(MAX_TOKEN_BUDGET),
     includeLarge: z.boolean(),
     checkIntervalHours: z.number().min(0),
     lastRefresh: z.string().datetime({ offset: true }),

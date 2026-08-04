@@ -418,4 +418,18 @@ describe("parseTokenBudgetOption", () => {
     expect(() => parseTokenBudgetOption("0")).toThrow();
     expect(() => parseTokenBudgetOption("-5")).toThrow();
   });
+
+  it("throws for a value below the minimum budget", () => {
+    expect(() => parseTokenBudgetOption("200")).toThrow();
+    expect(() => parseTokenBudgetOption("499")).toThrow();
+  });
+
+  it("throws for a value above the maximum budget", () => {
+    expect(() => parseTokenBudgetOption("100001")).toThrow();
+  });
+
+  it("accepts the boundary budget values", () => {
+    expect(parseTokenBudgetOption("500")).toBe(500);
+    expect(parseTokenBudgetOption("100000")).toBe(100000);
+  });
 });

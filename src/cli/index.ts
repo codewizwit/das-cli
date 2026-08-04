@@ -4,7 +4,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { confirm } from "@inquirer/prompts";
 import { Command, InvalidArgumentError } from "commander";
-import { readDasJson, writeDasJson } from "../emitter/das-json.js";
+import {
+  MAX_TOKEN_BUDGET,
+  MIN_TOKEN_BUDGET,
+  readDasJson,
+  writeDasJson,
+} from "../emitter/das-json.js";
 import { renderSkillPlan } from "../emitter/render.js";
 import { writeSkillTransactional } from "../emitter/write.js";
 import { refreshSkill, runHookRefresh } from "../refresh/refresh.js";
@@ -270,25 +275,25 @@ function toAddArgs(source: string, options: AddCommandOptions): AddArgs {
 /**
  * Parse and validate the `--token-budget` Commander option.
  *
- * Rejecting a malformed value here, before `runAdd` ever runs, is what keeps a typo like
- * `--token-budget not-a-number` from reaching the pipeline as `NaN`.
+ * Rejecting an out-of-range value here, before `runAdd` ever clones or slices, is what
+ * keeps a typo like `--token-budget not-a-number` from reaching the pipeline as `NaN`
+ * and a sub-floor value like `--token-budget 200` from failing late at the das.json
+ * write. The bounds match the manifest schema so the two cannot drift.
  *
  * @param value - The raw string Commander captured for `--token-budget`
- * @returns The parsed positive integer
- * @throws {@link InvalidArgumentError} When `value` is not a positive integer
+ * @returns The parsed integer, within the accepted range
+ * @throws {@link InvalidArgumentError} When `value` is not an integer within range
  */
 export function parseTokenBudgetOption(value: string): number {
+  const message = `--token-budget must be an integer between ${String(MIN_TOKEN_BUDGET)} and ${String(MAX_TOKEN_BUDGET)}, got "${value}".`;
+
   if (!/^\d+$/.test(value.trim())) {
-    throw new InvalidArgumentError(
-      `--token-budget must be a positive integer, got "${value}".`,
-    );
+    throw new InvalidArgumentError(message);
   }
 
   const parsed = Number.parseInt(value, 10);
-  if (parsed <= 0) {
-    throw new InvalidArgumentError(
-      `--token-budget must be a positive integer, got "${value}".`,
-    );
+  if (parsed < MIN_TOKEN_BUDGET || parsed > MAX_TOKEN_BUDGET) {
+    throw new InvalidArgumentError(message);
   }
 
   return parsed;
@@ -379,7 +384,7 @@ export function createProgram(): Command {
     )
     .option(
       "--token-budget <n>",
-      "per-file token budget",
+      `per-file token budget (${String(MIN_TOKEN_BUDGET)}-${String(MAX_TOKEN_BUDGET)})`,
       parseTokenBudgetOption,
     )
     .option(

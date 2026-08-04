@@ -29,12 +29,22 @@ const ROLE_MARKER_PATTERN = /^(system|assistant|user):/i;
 
 /**
  * An always-invoke imperative aimed at the assistant requires both an always-cadence
- * word and an assistant-directed cue on the same line, so stock "always run the tests"
- * documentation phrasing (no assistant cue) does not fire.
+ * word and a cue that unambiguously names the assistant's response behaviour on the
+ * same line. The cue set is deliberately narrow: bare `you must` / `you should`,
+ * `invoke`, `consult`, and `each request` were all removed because they saturate
+ * ordinary documentation prose ("you must always return an array", "prerenders on
+ * each request", "the model can invoke tools"). Only phrasing about the reply itself
+ * (this skill, before responding, before answering) fires.
+ *
+ * Accepted gap: a bare tool-directed imperative like "always invoke the shell tool" is
+ * lexically identical to benign AI-agent documentation, so no keyword cue can flag it
+ * without re-firing on real docs (measured against seven repos). This label therefore
+ * does not catch it; the untrusted-content frame, the primary defence, covers it, and
+ * the gap is pinned by a test so it stays a conscious decision rather than drift.
  */
 const ALWAYS_KEYWORD_PATTERN = /\b(always|every time)\b/i;
 const ASSISTANT_DIRECTED_CUE_PATTERN =
-  /\b(consult|invoke|this skill|you must|you should|before responding|each request)\b/i;
+  /\b(this skill|before responding|before answering)\b/i;
 
 /**
  * The JSON tool-call shape requires both a `"name"` key with a string value and a
@@ -79,7 +89,21 @@ function capExcerpt(line: string): string {
     : trimmed;
 }
 
-function detectLinePatterns(line: string): string[] {
+/**
+ * Detect the tripwire patterns on a single line.
+ *
+ * The prose-hijack tripwires (`role-marker`, `always-invoke`) target narrative text
+ * trying to steer the assistant and are suppressed inside fenced code, where a line
+ * such as `user: 252020,` is a JSON/JS object key rather than a chat-role marker. The
+ * code-shaped tripwires (`instruction-override`, `curl-pipe-shell`, `base64-decode`)
+ * fire in every context, since a download-and-execute one-liner is exactly what lives
+ * inside a fenced install block.
+ *
+ * @param line - The raw line to inspect
+ * @param insideFence - Whether the line sits within a fenced code block
+ * @returns The pattern labels that matched, in detection order
+ */
+function detectLinePatterns(line: string, insideFence: boolean): string[] {
   const patterns: string[] = [];
   const lowerLine = line.toLowerCase();
   const trimmedLine = line.trim();
@@ -90,11 +114,12 @@ function detectLinePatterns(line: string): string[] {
     patterns.push("instruction-override");
   }
 
-  if (ROLE_MARKER_PATTERN.test(trimmedLine)) {
+  if (!insideFence && ROLE_MARKER_PATTERN.test(trimmedLine)) {
     patterns.push("role-marker");
   }
 
   if (
+    !insideFence &&
     ALWAYS_KEYWORD_PATTERN.test(line) &&
     ASSISTANT_DIRECTED_CUE_PATTERN.test(line)
   ) {
@@ -132,42 +157,86 @@ function detectToolCallShapeInFence(
     }));
 }
 
+/** The fence character (backtick or tilde) and run length of a fence delimiter line. */
+interface FenceDelimiter {
+  char: "`" | "~";
+  length: number;
+}
+
+/** Parse a trimmed line's leading fence delimiter, or null when it opens no fence. */
+function parseFenceDelimiter(trimmedLine: string): FenceDelimiter | null {
+  const char = trimmedLine[0];
+  if (char !== "`" && char !== "~") {
+    return null;
+  }
+  let length = 0;
+  while (trimmedLine[length] === char) {
+    length += 1;
+  }
+  return length >= 3 ? { char, length } : null;
+}
+
+/**
+ * Whether a trimmed line closes a fence opened with `open`.
+ *
+ * Per CommonMark a fenced block closes only on a line made up solely of the opener's
+ * fence character, at least as long as the opener. A shorter run, the other fence
+ * character, or a run followed by any text is content. This is what keeps a shorter
+ * inner fence from prematurely closing a longer outer fence, the variable-length
+ * nesting real MDX documentation uses.
+ */
+function closesFence(trimmedLine: string, open: FenceDelimiter): boolean {
+  if (trimmedLine.length < open.length) {
+    return false;
+  }
+  for (const char of trimmedLine) {
+    if (char !== open.char) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function scanFileForInjection(file: EmitFile): InjectionFinding[] {
   const findings: InjectionFinding[] = [];
   const lines = file.content.split("\n");
-  let insideFence = false;
+  let openFence: FenceDelimiter | null = null;
   let fenceLines: FenceLine[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     const lineNumber = index + 1;
     const trimmedLine = line.trim();
+    const delimiter = parseFenceDelimiter(trimmedLine);
 
-    if (trimmedLine.startsWith("```")) {
-      if (!insideFence) {
-        const infoString = trimmedLine.slice(3).trim().toLowerCase();
-        if (TOOL_CALL_FENCE_INFO_STRINGS.has(infoString)) {
-          findings.push({
-            relativePath: file.relativePath,
-            line: lineNumber,
-            pattern: "tool-call-fence",
-            excerpt: capExcerpt(trimmedLine),
-          });
+    if (openFence === null) {
+      if (delimiter !== null) {
+        const infoString = trimmedLine.slice(delimiter.length).trim();
+        const opensFence = delimiter.char === "~" || !infoString.includes("`");
+        if (opensFence) {
+          if (TOOL_CALL_FENCE_INFO_STRINGS.has(infoString.toLowerCase())) {
+            findings.push({
+              relativePath: file.relativePath,
+              line: lineNumber,
+              pattern: "tool-call-fence",
+              excerpt: capExcerpt(trimmedLine),
+            });
+          }
+          openFence = delimiter;
+          fenceLines = [];
         }
-        insideFence = true;
-        fenceLines = [];
-      } else {
-        findings.push(
-          ...detectToolCallShapeInFence(file.relativePath, fenceLines),
-        );
-        insideFence = false;
-        fenceLines = [];
       }
-    } else if (insideFence) {
+    } else if (closesFence(trimmedLine, openFence)) {
+      findings.push(
+        ...detectToolCallShapeInFence(file.relativePath, fenceLines),
+      );
+      openFence = null;
+      fenceLines = [];
+    } else {
       fenceLines.push({ lineNumber, line });
     }
 
-    for (const pattern of detectLinePatterns(line)) {
+    for (const pattern of detectLinePatterns(line, openFence !== null)) {
       findings.push({
         relativePath: file.relativePath,
         line: lineNumber,
@@ -177,7 +246,7 @@ function scanFileForInjection(file: EmitFile): InjectionFinding[] {
     }
   }
 
-  if (insideFence) {
+  if (openFence !== null) {
     findings.push(...detectToolCallShapeInFence(file.relativePath, fenceLines));
   }
 

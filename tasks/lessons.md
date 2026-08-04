@@ -31,3 +31,15 @@ Each passed a green unit suite and was only caught by review agents running real
 - Schedule an end-to-end task that runs the REAL wired pipeline (not fakes) against a realistic fixture, and schedule it to actually find bugs — treat a green e2e run that asserts nothing new as a smell.
 - For any pure helper that must be invoked by a pipeline, add an integration assertion that the pipeline's OUTPUT reflects the helper's effect, not just a unit test of the helper alone. A DRY shared step (e.g. `buildSizedTree`) that both call sites use is better than two inline sequences that can each forget a step.
 - Point at least one test at a first-run-on-a-clean-machine scenario (no pre-existing dirs/config) — directory-creation and other environmental preconditions hide when every fixture pre-creates its scaffolding.
+
+## A heuristic scanner passed synthetic tests but false-fired on 100% of real docs
+
+**Pattern:** The injection scanner (`src/scan/injection.ts`) had a green, thoughtful unit suite with hand-written true-positive and true-negative cases, yet dogfooding `das add --yes` against seven real public docs repos (Prisma, VS Code, Next.js, Node, React, Kubernetes) aborted on all seven — every failure a false positive. Two rules were miscalibrated: prose tripwires (`role-marker`, `always-invoke`) scanned inside fenced code, so `user: 252020,` in a JS sample read as a chat-role marker; and the `always-invoke` cue accepted bare `you must`/`you should`, which saturate ordinary documentation prose ("you must always return an array").
+
+**Root cause:** A precision/recall heuristic's real behavior is a property of the corpus it runs against, not of a handful of author-chosen examples. The synthetic tests encoded what the author imagined an attack and a benign line look like; they could not reveal that the benign class (code samples with `user:` keys, "you should always" advice) dominates real docs and overwhelmingly matches. Passing unit tests measured internal consistency, not field precision.
+
+**Prevention rules:**
+
+- For any heuristic that classifies untrusted real-world input (scanners, detectors, filters), validate against a real corpus before shipping — run it over several representative real inputs and measure the false-positive rate, don't just assert on synthetic fixtures. Treat "0 false positives across N real repos" as an acceptance criterion, and keep a couple of those real strings as regression tests.
+- When a safety heuristic's false-positive rate is high, that is itself a safety bug: a tripwire that fires on every input trains the user to bypass it, so it protects nothing. Precision is a security property, not a nicety.
+- Keep the real defense (here the untrusted-content frame) distinct from the tripwire, so tuning the tripwire's precision never weakens the guarantee.

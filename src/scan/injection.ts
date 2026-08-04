@@ -35,6 +35,12 @@ const ROLE_MARKER_PATTERN = /^(system|assistant|user):/i;
  * ordinary documentation prose ("you must always return an array", "prerenders on
  * each request", "the model can invoke tools"). Only phrasing about the reply itself
  * (this skill, before responding, before answering) fires.
+ *
+ * Accepted gap: a bare tool-directed imperative like "always invoke the shell tool" is
+ * lexically identical to benign AI-agent documentation, so no keyword cue can flag it
+ * without re-firing on real docs (measured against seven repos). This label therefore
+ * does not catch it; the untrusted-content frame, the primary defence, covers it, and
+ * the gap is pinned by a test so it stays a conscious decision rather than drift.
  */
 const ALWAYS_KEYWORD_PATTERN = /\b(always|every time)\b/i;
 const ASSISTANT_DIRECTED_CUE_PATTERN =
@@ -151,66 +157,86 @@ function detectToolCallShapeInFence(
     }));
 }
 
-/** Count the run of leading backtick characters on a trimmed line (4 for a four-backtick fence). */
-function leadingBacktickRun(trimmedLine: string): number {
-  let count = 0;
-  while (trimmedLine[count] === "`") {
-    count += 1;
+/** The fence character (backtick or tilde) and run length of a fence delimiter line. */
+interface FenceDelimiter {
+  char: "`" | "~";
+  length: number;
+}
+
+/** Parse a trimmed line's leading fence delimiter, or null when it opens no fence. */
+function parseFenceDelimiter(trimmedLine: string): FenceDelimiter | null {
+  const char = trimmedLine[0];
+  if (char !== "`" && char !== "~") {
+    return null;
   }
-  return count;
+  let length = 0;
+  while (trimmedLine[length] === char) {
+    length += 1;
+  }
+  return length >= 3 ? { char, length } : null;
 }
 
 /**
- * Whether a trimmed line closes a fence opened with openFenceLength backticks.
+ * Whether a trimmed line closes a fence opened with `open`.
  *
- * Per CommonMark a fenced block is closed only by a line of backticks alone (no info
- * string) whose run is at least as long as the opener. This is what keeps a shorter
+ * Per CommonMark a fenced block closes only on a line made up solely of the opener's
+ * fence character, at least as long as the opener. A shorter run, the other fence
+ * character, or a run followed by any text is content. This is what keeps a shorter
  * inner fence from prematurely closing a longer outer fence, the variable-length
  * nesting real MDX documentation uses.
  */
-function closesFence(trimmedLine: string, openFenceLength: number): boolean {
-  return trimmedLine.length >= openFenceLength && /^`+$/.test(trimmedLine);
+function closesFence(trimmedLine: string, open: FenceDelimiter): boolean {
+  if (trimmedLine.length < open.length) {
+    return false;
+  }
+  for (const char of trimmedLine) {
+    if (char !== open.char) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function scanFileForInjection(file: EmitFile): InjectionFinding[] {
   const findings: InjectionFinding[] = [];
   const lines = file.content.split("\n");
-  let openFenceLength = 0;
+  let openFence: FenceDelimiter | null = null;
   let fenceLines: FenceLine[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index] ?? "";
     const lineNumber = index + 1;
     const trimmedLine = line.trim();
-    const backtickRun = trimmedLine.startsWith("```")
-      ? leadingBacktickRun(trimmedLine)
-      : 0;
+    const delimiter = parseFenceDelimiter(trimmedLine);
 
-    if (openFenceLength === 0) {
-      if (backtickRun >= 3) {
-        const infoString = trimmedLine.slice(backtickRun).trim().toLowerCase();
-        if (TOOL_CALL_FENCE_INFO_STRINGS.has(infoString)) {
-          findings.push({
-            relativePath: file.relativePath,
-            line: lineNumber,
-            pattern: "tool-call-fence",
-            excerpt: capExcerpt(trimmedLine),
-          });
+    if (openFence === null) {
+      if (delimiter !== null) {
+        const infoString = trimmedLine.slice(delimiter.length).trim();
+        const opensFence = delimiter.char === "~" || !infoString.includes("`");
+        if (opensFence) {
+          if (TOOL_CALL_FENCE_INFO_STRINGS.has(infoString.toLowerCase())) {
+            findings.push({
+              relativePath: file.relativePath,
+              line: lineNumber,
+              pattern: "tool-call-fence",
+              excerpt: capExcerpt(trimmedLine),
+            });
+          }
+          openFence = delimiter;
+          fenceLines = [];
         }
-        openFenceLength = backtickRun;
-        fenceLines = [];
       }
-    } else if (closesFence(trimmedLine, openFenceLength)) {
+    } else if (closesFence(trimmedLine, openFence)) {
       findings.push(
         ...detectToolCallShapeInFence(file.relativePath, fenceLines),
       );
-      openFenceLength = 0;
+      openFence = null;
       fenceLines = [];
     } else {
       fenceLines.push({ lineNumber, line });
     }
 
-    for (const pattern of detectLinePatterns(line, openFenceLength !== 0)) {
+    for (const pattern of detectLinePatterns(line, openFence !== null)) {
       findings.push({
         relativePath: file.relativePath,
         line: lineNumber,
@@ -220,7 +246,7 @@ function scanFileForInjection(file: EmitFile): InjectionFinding[] {
     }
   }
 
-  if (openFenceLength !== 0) {
+  if (openFence !== null) {
     findings.push(...detectToolCallShapeInFence(file.relativePath, fenceLines));
   }
 

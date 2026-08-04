@@ -29,12 +29,15 @@ const ROLE_MARKER_PATTERN = /^(system|assistant|user):/i;
 
 /**
  * An always-invoke imperative aimed at the assistant requires both an always-cadence
- * word and an assistant-directed cue on the same line, so stock "always run the tests"
- * documentation phrasing (no assistant cue) does not fire.
+ * word and a genuinely assistant- or skill-directed cue on the same line. Bare
+ * `you must` / `you should` are excluded because they saturate ordinary documentation
+ * prose ("you must always return an array", "you should always treat state as
+ * immutable"); the cue must name the assistant's behaviour (consult, invoke, this
+ * skill, before responding, each request) for the line to fire.
  */
 const ALWAYS_KEYWORD_PATTERN = /\b(always|every time)\b/i;
 const ASSISTANT_DIRECTED_CUE_PATTERN =
-  /\b(consult|invoke|this skill|you must|you should|before responding|each request)\b/i;
+  /\b(consult|invoke|this skill|before responding|each request)\b/i;
 
 /**
  * The JSON tool-call shape requires both a `"name"` key with a string value and a
@@ -79,7 +82,21 @@ function capExcerpt(line: string): string {
     : trimmed;
 }
 
-function detectLinePatterns(line: string): string[] {
+/**
+ * Detect the tripwire patterns on a single line.
+ *
+ * The prose-hijack tripwires (`role-marker`, `always-invoke`) target narrative text
+ * trying to steer the assistant and are suppressed inside fenced code, where a line
+ * such as `user: 252020,` is a JSON/JS object key rather than a chat-role marker. The
+ * code-shaped tripwires (`instruction-override`, `curl-pipe-shell`, `base64-decode`)
+ * fire in every context, since a download-and-execute one-liner is exactly what lives
+ * inside a fenced install block.
+ *
+ * @param line - The raw line to inspect
+ * @param insideFence - Whether the line sits within a fenced code block
+ * @returns The pattern labels that matched, in detection order
+ */
+function detectLinePatterns(line: string, insideFence: boolean): string[] {
   const patterns: string[] = [];
   const lowerLine = line.toLowerCase();
   const trimmedLine = line.trim();
@@ -90,11 +107,12 @@ function detectLinePatterns(line: string): string[] {
     patterns.push("instruction-override");
   }
 
-  if (ROLE_MARKER_PATTERN.test(trimmedLine)) {
+  if (!insideFence && ROLE_MARKER_PATTERN.test(trimmedLine)) {
     patterns.push("role-marker");
   }
 
   if (
+    !insideFence &&
     ALWAYS_KEYWORD_PATTERN.test(line) &&
     ASSISTANT_DIRECTED_CUE_PATTERN.test(line)
   ) {
@@ -167,7 +185,7 @@ function scanFileForInjection(file: EmitFile): InjectionFinding[] {
       fenceLines.push({ lineNumber, line });
     }
 
-    for (const pattern of detectLinePatterns(line)) {
+    for (const pattern of detectLinePatterns(line, insideFence)) {
       findings.push({
         relativePath: file.relativePath,
         line: lineNumber,

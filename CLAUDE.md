@@ -1,6 +1,6 @@
 # das-cli: guidance for Claude Code sessions in this repo
 
-`das` (Documentation as a Skill) converts a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill. Read `README.md` for the user-facing command reference and `docs/architecture.md` for the pipeline and diagrams before making structural changes.
+`das` (Documentation as Skills) converts a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill. Read `README.md` for the user-facing command reference and `docs/architecture.md` for the pipeline and diagrams before making structural changes.
 
 ## Sources of truth
 

@@ -365,7 +365,7 @@ export function createProgram(): Command {
   program
     .name("das")
     .description(
-      "Documentation as a Skill: convert documentation into a token-bounded Claude Code skill.",
+      "Documentation as Skills: convert documentation into a token-bounded Claude Code skill.",
     )
     .version(readPackageVersion(), "-v, --version");
 

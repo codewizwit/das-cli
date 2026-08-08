@@ -2,7 +2,9 @@
 
 **[Documentation site](https://codewizwit.github.io/das-cli/)**. This README is the quickstart; the site has the full docs, command reference, and architecture diagrams.
 
-**Documentation as a Skill.** Point `das` at a GitHub URL, a Markdown file, a docs folder, or a project root, and it slices the documentation into a token-bounded, progressive-disclosure Claude Code skill: a `SKILL.md` table of contents plus a tree of resource files, each sized to fit inside a budget. Claude loads the index, then only the sections it actually needs.
+**Documentation as Skills.** `das` slices documentation into context-efficient chunks with an index, so Claude loads only what it needs on demand. Point it at a GitHub URL, a Markdown file, a docs folder, or a project root.
+
+Two things improve: context spent per question, and accuracy, because the model picks its next read from an index rather than from whatever a search happened to surface.
 
 ```
 das add https://github.com/prisma/docs

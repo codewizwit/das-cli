@@ -13,7 +13,7 @@ das --help
 ```text
 Usage: das [options] [command]
 
-Documentation as a Skill: convert documentation into a token-bounded Claude Code
+Documentation as Skills: convert documentation into a token-bounded Claude Code
 skill.
 
 Options:

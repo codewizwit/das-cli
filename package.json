@@ -1,7 +1,7 @@
 {
   "name": "@codewizwit/das-cli",
   "version": "0.1.1",
-  "description": "Documentation as a Skill: convert a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill.",
+  "description": "Slices documentation into context-efficient chunks with an index, so Claude loads only what it needs on demand. Point it at a GitHub URL, a Markdown file, a docs folder, or a project root.",
   "type": "module",
   "license": "MIT",
   "repository": {

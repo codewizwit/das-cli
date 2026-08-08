@@ -4,7 +4,7 @@ import type * as Preset from "@docusaurus/preset-classic";
 
 const config: Config = {
   title: "das",
-  tagline: "Documentation as a Skill",
+  tagline: "Documentation as Skills",
   favicon: "img/favicon.png",
 
   future: {

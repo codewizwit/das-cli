@@ -31,7 +31,7 @@ function Hero(): ReactNode {
     <header className={styles.hero}>
       <div className={styles.heroInner}>
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>Documentation as a Skill</p>
+          <p className={styles.eyebrow}>Documentation as Skills</p>
           <Heading as="h1" className={styles.title}>
             Give Claude a map to your context.
           </Heading>
@@ -127,7 +127,7 @@ function Flow(): ReactNode {
 export default function Home(): ReactNode {
   return (
     <Layout
-      title="das: Documentation as a Skill"
+      title="das: Documentation as Skills"
       description="Convert a GitHub URL, Markdown file, docs folder, or project root into a token-bounded, progressive-disclosure Claude Code skill."
     >
       <Hero />

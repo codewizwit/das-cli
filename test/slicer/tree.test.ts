@@ -179,6 +179,90 @@ describe("buildTree", () => {
   });
 });
 
+describe("a folder's own index page", () => {
+  const titleFor = (fileName: string): string =>
+    fileName.replace(/\.(md|mdx|markdown)$/i, "").toUpperCase();
+
+  const folderWith = (names: string[]): DocFile[] =>
+    names.map((name) => {
+      const title = titleFor(name);
+      return {
+        relativePath: `architecture/${name}`,
+        raw: `---\ntitle: ${title}\ndescription: About ${title}.\n---\n\n# ${title}\n`,
+        content: `# ${title}\n`,
+        frontmatter: { title, description: `About ${title}.` },
+      };
+    });
+
+  it("hoists an index.md onto the folder node instead of listing it as a child", () => {
+    const tree = buildTree(folderWith(["index.md", "overview.md"]), "root");
+    const folder = tree.children[0]!;
+
+    expect(folder.segment).toBe("architecture");
+    expect(folder.source?.relativePath).toBe("architecture/index.md");
+    // The landing page's own title names the folder.
+    expect(folder.name).toBe("INDEX");
+    expect(folder.children.map((child) => child.source?.relativePath)).toEqual([
+      "architecture/overview.md",
+    ]);
+  });
+
+  it("hoists a README.md the same way, and prefers index.md when both exist", () => {
+    const readmeOnly = buildTree(folderWith(["README.md", "a.md"]), "root");
+    expect(readmeOnly.children[0]?.source?.relativePath).toBe(
+      "architecture/README.md",
+    );
+
+    const both = buildTree(
+      folderWith(["README.md", "index.md", "a.md"]),
+      "root",
+    );
+    expect(both.children[0]?.source?.relativePath).toBe(
+      "architecture/index.md",
+    );
+    expect(
+      both.children[0]?.children.map((child) => child.source?.relativePath),
+    ).toEqual(["architecture/README.md", "architecture/a.md"]);
+  });
+
+  it("keeps the folder segment as the name when the landing page declares no title", () => {
+    const tree = buildTree(
+      [
+        {
+          relativePath: "architecture/index.md",
+          raw: "Just prose, no heading and no frontmatter.\n",
+          content: "Just prose, no heading and no frontmatter.\n",
+          frontmatter: {},
+        },
+      ],
+      "root",
+    );
+    const folder = tree.children[0]!;
+
+    expect(folder.source?.relativePath).toBe("architecture/index.md");
+    expect(folder.name).toBe("architecture");
+  });
+
+  it("leaves a top-level README alone, since SKILL.md is the root index", () => {
+    const tree = buildTree(
+      [
+        {
+          relativePath: "README.md",
+          raw: "# Handbook\n",
+          content: "# Handbook\n",
+          frontmatter: {},
+        },
+      ],
+      "root",
+    );
+
+    expect(tree.source).toBeUndefined();
+    expect(tree.children.map((child) => child.source?.relativePath)).toEqual([
+      "README.md",
+    ]);
+  });
+});
+
 describe("collapseSingleChildChains", () => {
   it("collapses a chain of empty-body single-child nodes into one node carrying the deepest node's content", () => {
     const leaf: DocNode = {

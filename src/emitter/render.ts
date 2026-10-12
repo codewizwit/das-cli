@@ -1,7 +1,7 @@
 import { dirname, relative } from "node:path";
 import { firstSummary } from "../markdown/summary.js";
 import type { EmissionPlan, PlannedFile } from "../slicer/emit-plan.js";
-import type { DocNode, EmitFile } from "../types.js";
+import type { DocFile, EmitFile } from "../types.js";
 
 /** Inputs needed to render a plan into skill file contents. */
 export interface RenderContext {
@@ -68,34 +68,18 @@ function renderTableOfContents(
   const lines = file.childPaths.map((childPath) => {
     const child = lookupPlannedFile(filesByPath, childPath);
     const link = relativeLink(file.relativePath, childPath);
-    const summary = firstSummary(child.node.body);
+    // A file node's own body is only its preamble, and most documents open
+    // with a heading, so summarise the whole document. firstSummary skips
+    // headings, which lands on the first prose paragraph: the same thing
+    // Docusaurus uses when a page declares no description.
+    const summary = firstSummary(
+      child.node.source?.content ?? child.node.body,
+    );
     const summarySuffix = summary === "" ? "" : ` — ${summary}`;
     return `- [${escapeLinkText(child.node.name)}](${escapeLinkTarget(link)})${summarySuffix}`;
   });
 
   return lines.join("\n");
-}
-
-/**
- * Render a documentation subtree as nested Markdown sections.
- *
- * Emits the node's name as a heading at the given depth followed by its
- * body, then recurses into its children at the next heading depth,
- * depth-first.
- *
- * @param node - The subtree root to render
- * @param depth - The heading level (number of `#` characters) for this node
- * @returns The rendered Markdown for this node and all its descendants
- */
-export function renderSubtreeMarkdown(node: DocNode, depth: number): string {
-  const heading = `${"#".repeat(depth)} ${node.name}`;
-  const sections = [
-    heading,
-    node.body,
-    ...node.children.map((child) => renderSubtreeMarkdown(child, depth + 1)),
-  ].filter((section) => section !== "");
-
-  return sections.join("\n\n");
 }
 
 function renderStructuralContent(
@@ -106,9 +90,7 @@ function renderStructuralContent(
     return renderTableOfContents(file, filesByPath);
   }
 
-  return file.node.children
-    .map((child) => renderSubtreeMarkdown(child, 2))
-    .join("\n\n");
+  return "";
 }
 
 function renderSkillFile(
@@ -158,11 +140,27 @@ function renderFramedFile(
   return `${sections.join("\n\n")}\n`;
 }
 
+/**
+ * Render a resource: the frame line, a blank line, then the source file.
+ *
+ * Everything after the frame line is {@link DocFile.raw} byte for byte,
+ * frontmatter included. Nothing here may reformat, re-level or normalise
+ * the source, because grep over a resource has to be grep over the
+ * original.
+ */
+function renderResourceFile(source: DocFile, context: RenderContext): string {
+  return `${frameLine(context.sourceLabel)}\n\n${source.raw}`;
+}
+
 function renderPlannedFile(
   file: PlannedFile,
   context: RenderContext,
   filesByPath: Map<string, PlannedFile>,
 ): string {
+  if (file.node.source !== undefined) {
+    return renderResourceFile(file.node.source, context);
+  }
+
   return file.role === "skill"
     ? renderSkillFile(file, context, filesByPath)
     : renderFramedFile(file, context, filesByPath);
@@ -171,13 +169,12 @@ function renderPlannedFile(
 /**
  * Render an emission plan's structure into full file contents.
  *
- * SKILL.md gets YAML frontmatter with exactly `name` and `description`
- * followed by a fixed untrusted-content notice. Every other file opens
- * with a one-line frame naming the source. Any file with a non-empty
- * `childPaths` renders a linked table of contents; a file with empty
- * `childPaths` but non-empty node children instead inlines its descendant
- * subtree as nested Markdown sections, which covers both leaf files and
- * the whole-tree-fits case where SKILL.md itself carries the full tree.
+ * A resource, meaning any planned file carrying a source, is the frame line
+ * followed by that file's bytes verbatim. SKILL.md gets YAML frontmatter with
+ * exactly `name` and `description`, its generated table of contents, and the
+ * untrusted-content notice above whatever sliced content it carries of its
+ * own. Every other index opens with a one-line frame naming the source and
+ * renders a linked table of contents.
  *
  * @param plan - The structural emission plan to render
  * @param context - The skill name, description, and source label to render into the files

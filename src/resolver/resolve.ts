@@ -44,7 +44,7 @@ function assertWithinCaps(
   }
 
   const totalContentBytes = docFiles.reduce(
-    (total, docFile) => total + Buffer.byteLength(docFile.content, "utf-8"),
+    (total, docFile) => total + Buffer.byteLength(docFile.raw, "utf-8"),
     0,
   );
 

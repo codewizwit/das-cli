@@ -76,6 +76,7 @@ function manifestEntryFor(dasJson: DasJson, skillPath: string): ManifestEntry {
 
 const docFile: DocFile = {
   relativePath: "intro.md",
+  raw: "# Intro\n\nHello.",
   content: "# Intro\n\nHello.",
   frontmatter: {},
 };

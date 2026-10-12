@@ -49,7 +49,7 @@ export function hashFileset(files: DocFile[], params: HashParams): string {
 
   for (const file of sortedFiles) {
     appendLengthPrefixedField(hash, file.relativePath);
-    appendLengthPrefixedField(hash, file.content);
+    appendLengthPrefixedField(hash, file.raw);
   }
 
   appendLengthPrefixedField(hash, String(params.slicerVersion));

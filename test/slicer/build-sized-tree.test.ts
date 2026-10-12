@@ -7,6 +7,7 @@ describe("buildSizedTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "guides/install.md",
+        raw: "# Installation\n\nFollow these steps to install the tool.",
         content: "# Installation\n\nFollow these steps to install the tool.",
         frontmatter: { title: "Installation" },
       },
@@ -26,6 +27,7 @@ describe("buildSizedTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw: "# Introduction\n\nWelcome to the docs.",
         content: "# Introduction\n\nWelcome to the docs.",
         frontmatter: { title: "Introduction" },
       },
@@ -45,6 +47,8 @@ describe("buildSizedTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "guide.md",
+        raw:
+          "# Guide\n\nIntro text.\n\n## Step One\n\nDo the first thing.\n\n## Step Two\n\nDo the second thing.",
         content:
           "# Guide\n\nIntro text.\n\n## Step One\n\nDo the first thing.\n\n## Step Two\n\nDo the second thing.",
         frontmatter: { title: "Guide" },

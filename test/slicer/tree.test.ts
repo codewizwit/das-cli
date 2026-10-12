@@ -179,7 +179,7 @@ describe("buildTree", () => {
   });
 });
 
-describe("a folder's own index page", () => {
+describe("a folder's own landing page", () => {
   const titleFor = (fileName: string): string =>
     fileName.replace(/\.(md|mdx|markdown)$/i, "").toUpperCase();
 
@@ -194,22 +194,25 @@ describe("a folder's own index page", () => {
       };
     });
 
-  it("hoists an index.md onto the folder node instead of listing it as a child", () => {
+  it("reads an index.md for the folder's name and description, and still lists it", () => {
     const tree = buildTree(folderWith(["index.md", "overview.md"]), "root");
     const folder = tree.children[0]!;
 
     expect(folder.segment).toBe("architecture");
-    expect(folder.source?.relativePath).toBe("architecture/index.md");
+    expect(folder.landing?.relativePath).toBe("architecture/index.md");
     // The landing page's own title names the folder.
     expect(folder.name).toBe("INDEX");
+    // It stays an ordinary entry; das's index has a name of its own.
     expect(folder.children.map((child) => child.source?.relativePath)).toEqual([
+      "architecture/index.md",
       "architecture/overview.md",
     ]);
+    expect(folder.source).toBeUndefined();
   });
 
-  it("hoists a README.md the same way, and prefers index.md when both exist", () => {
+  it("reads a README.md the same way, and prefers index.md when both exist", () => {
     const readmeOnly = buildTree(folderWith(["README.md", "a.md"]), "root");
-    expect(readmeOnly.children[0]?.source?.relativePath).toBe(
+    expect(readmeOnly.children[0]?.landing?.relativePath).toBe(
       "architecture/README.md",
     );
 
@@ -217,12 +220,16 @@ describe("a folder's own index page", () => {
       folderWith(["README.md", "index.md", "a.md"]),
       "root",
     );
-    expect(both.children[0]?.source?.relativePath).toBe(
+    expect(both.children[0]?.landing?.relativePath).toBe(
       "architecture/index.md",
     );
     expect(
       both.children[0]?.children.map((child) => child.source?.relativePath),
-    ).toEqual(["architecture/README.md", "architecture/a.md"]);
+    ).toEqual([
+      "architecture/index.md",
+      "architecture/README.md",
+      "architecture/a.md",
+    ]);
   });
 
   it("keeps the folder segment as the name when the landing page declares no title", () => {
@@ -239,7 +246,7 @@ describe("a folder's own index page", () => {
     );
     const folder = tree.children[0]!;
 
-    expect(folder.source?.relativePath).toBe("architecture/index.md");
+    expect(folder.landing?.relativePath).toBe("architecture/index.md");
     expect(folder.name).toBe("architecture");
   });
 
@@ -256,7 +263,7 @@ describe("a folder's own index page", () => {
       "root",
     );
 
-    expect(tree.source).toBeUndefined();
+    expect(tree.landing).toBeUndefined();
     expect(tree.children.map((child) => child.source?.relativePath)).toEqual([
       "README.md",
     ]);

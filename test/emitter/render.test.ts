@@ -366,9 +366,29 @@ describe("renderSkillPlan", () => {
     expect(content).not.toContain("Overview, Design");
   });
 
-  it("renders a folder index as its landing page verbatim, then the listing", () => {
-    const raw = "---\ntitle: Architecture\n---\n\n# Architecture\n\nHow the system is shaped.\n";
+  it("renders a generated folder index as the frame plus its listing only", () => {
     const files: PlannedFile[] = [
+      {
+        relativePath: "resources/architecture/_das-index.md",
+        node: {
+          name: "Architecture",
+          body: "",
+          children: [],
+          subtreeTokens: 0,
+          segment: "architecture",
+          landing: {
+            relativePath: "architecture/index.md",
+            raw: "---\ntitle: Architecture\n---\n\n# Architecture\n\nHow the system is shaped.\n",
+            content: "# Architecture\n\nHow the system is shaped.\n",
+            frontmatter: { title: "Architecture" },
+          },
+        },
+        role: "index",
+        childPaths: [
+          "resources/architecture/index.md",
+          "resources/architecture/overview.md",
+        ],
+      },
       {
         relativePath: "resources/architecture/index.md",
         node: {
@@ -376,16 +396,15 @@ describe("renderSkillPlan", () => {
           body: "",
           children: [],
           subtreeTokens: 0,
-          segment: "architecture",
           source: {
             relativePath: "architecture/index.md",
-            raw,
+            raw: "---\ntitle: Architecture\n---\n\n# Architecture\n\nHow the system is shaped.\n",
             content: "# Architecture\n\nHow the system is shaped.\n",
             frontmatter: { title: "Architecture" },
           },
         },
-        role: "index",
-        childPaths: ["resources/architecture/overview.md"],
+        role: "leaf",
+        childPaths: [],
       },
       {
         relativePath: "resources/architecture/overview.md",
@@ -406,14 +425,23 @@ describe("renderSkillPlan", () => {
       },
     ];
 
-    const content = contentFor(files, "resources/architecture/index.md");
+    const generated = contentFor(
+      files,
+      "resources/architecture/_das-index.md",
+    );
+    const landing = contentFor(files, "resources/architecture/index.md");
 
-    expect(content.split("\n")[0]).toMatch(/^> Reference material sliced from /);
-    // The landing page's bytes survive intact, directly after the frame.
-    expect(content).toContain(`\n\n${raw}`);
-    // ... and das's listing follows it.
-    const listingIndex = content.indexOf("- [System Overview](overview.md)");
-    expect(listingIndex).toBeGreaterThan(content.indexOf("How the system is shaped."));
+    // das's index holds nothing but the frame and the listing, and lists the
+    // landing page as an ordinary entry.
+    expect(generated.split("\n")[0]).toMatch(/^> Reference material sliced /);
+    expect(generated).toContain("- [Architecture](index.md)");
+    expect(generated).toContain("- [System Overview](overview.md)");
+    expect(generated).not.toContain("title: Architecture");
+
+    // The landing page itself is untouched.
+    expect(landing.split("\n").slice(2).join("\n")).toBe(
+      "---\ntitle: Architecture\n---\n\n# Architecture\n\nHow the system is shaped.\n",
+    );
   });
 
   it("quotes a skill name containing a colon in frontmatter", () => {

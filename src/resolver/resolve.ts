@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { DocFile, SourceRef } from "../types.js";
+import { GENERATED_INDEX_FILE_NAME, type DocFile, type SourceRef } from "../types.js";
 import { UnsupportedSourceError } from "./github-url.js";
 import { lsRemote, withTempClone, type GitRunner } from "./git.js";
 import { resolveLocal } from "./local.js";
@@ -24,6 +24,21 @@ export interface ResolveSourceOptions {
   maxBytes?: number;
 }
 
+/**
+ * Thrown when a source file is named the same as das's generated indexes.
+ *
+ * das emits one index per folder under {@link GENERATED_INDEX_FILE_NAME},
+ * chosen to be a name no corpus uses, so that every emitted resource is byte
+ * identical to its source. A source file with that name would be overwritten,
+ * so the run stops and names the file instead.
+ */
+export class ReservedFileNameError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReservedFileNameError";
+  }
+}
+
 /** Thrown when a resolved GitHub source exceeds the file-count or content-size cap. */
 export class SourceTooLargeError extends Error {
   constructor(message: string) {
@@ -32,11 +47,27 @@ export class SourceTooLargeError extends Error {
   }
 }
 
+function assertNoReservedNames(docFiles: DocFile[]): void {
+  const clashing = docFiles
+    .map((docFile) => docFile.relativePath)
+    .filter(
+      (relativePath) =>
+        (relativePath.split("/").pop() ?? "") === GENERATED_INDEX_FILE_NAME,
+    );
+
+  if (clashing.length > 0) {
+    throw new ReservedFileNameError(
+      `Source contains ${String(clashing.length)} file(s) named ${GENERATED_INDEX_FILE_NAME}, which das reserves for its generated indexes: ${clashing.join(", ")}. Rename them and run das again.`,
+    );
+  }
+}
+
 function assertWithinCaps(
   docFiles: DocFile[],
   maxFileCount: number,
   maxTotalContentBytes: number,
 ): void {
+  assertNoReservedNames(docFiles);
   if (docFiles.length > maxFileCount) {
     throw new SourceTooLargeError(
       `Source exceeds the ${String(maxFileCount)}-file cap: found ${String(docFiles.length)} files.`,

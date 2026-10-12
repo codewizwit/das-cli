@@ -1,5 +1,5 @@
 import { firstSummary } from "./summary.js";
-import type { DocNode } from "../types.js";
+import type { DocFile, DocNode } from "../types.js";
 
 /** Longest description das will put on a single index entry. */
 const maxDescriptionChars = 120;
@@ -9,8 +9,16 @@ const maxDescriptionChars = 120;
  *
  * This is the only tier das uses verbatim. Everything below it is derived.
  */
+/**
+ * The source that describes a node: its own file, or for a folder, the
+ * landing page that documents it.
+ */
+function describingSource(node: DocNode): DocFile | undefined {
+  return node.source ?? node.landing;
+}
+
 function authoredDescription(node: DocNode): string | undefined {
-  const declared = node.source?.frontmatter.description?.trim();
+  const declared = describingSource(node)?.frontmatter.description?.trim();
   return declared === undefined || declared === "" ? undefined : declared;
 }
 
@@ -19,7 +27,7 @@ function authoredDescription(node: DocNode): string | undefined {
  * default description when the page declares none.
  */
 function firstParagraph(node: DocNode): string {
-  return firstSummary(node.source?.content ?? node.body);
+  return firstSummary(describingSource(node)?.content ?? node.body);
 }
 
 /**

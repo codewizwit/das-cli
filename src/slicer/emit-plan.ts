@@ -1,5 +1,5 @@
 import { estimateTokens } from "../markdown/tokens.js";
-import type { DocNode } from "../types.js";
+import { GENERATED_INDEX_FILE_NAME, type DocNode } from "../types.js";
 
 /** A single file the emitter should write, referencing the node it renders. */
 export interface PlannedFile {
@@ -76,7 +76,7 @@ function describeChildren(
         {
           node,
           name: node.name,
-          emitPath: `${ownDir}/index.md`,
+          emitPath: `${ownDir}/${GENERATED_INDEX_FILE_NAME}`,
           recurses: true,
           ownDir,
         },
@@ -195,7 +195,7 @@ function buildGroupItem(
   oversizedIndexes: string[],
 ): PlacementItem {
   const groupSlug = `group-${String(ordinal)}`;
-  const groupRelativePath = `${ownDir}/${groupSlug}/index.md`;
+  const groupRelativePath = `${ownDir}/${groupSlug}/${GENERATED_INDEX_FILE_NAME}`;
   const firstItem = bucket[0];
   const lastItem = bucket[bucket.length - 1];
   const firstName = firstItem?.name ?? groupSlug;
@@ -307,9 +307,8 @@ function planIndexInto(
     oversizedIndexes,
   );
 
-  const ownContent = node.source?.raw ?? node.body;
   const ownFits =
-    estimateTokens(ownContent) + estimateTokens(renderToc(topLevelItems)) <=
+    estimateTokens(node.body) + estimateTokens(renderToc(topLevelItems)) <=
     budget;
 
   files.push({

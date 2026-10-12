@@ -444,6 +444,58 @@ describe("renderSkillPlan", () => {
     );
   });
 
+  it("puts the navigation note above SKILL.md's listing, and nowhere else", () => {
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("root", ""),
+        role: "skill",
+        childPaths: ["resources/area/_das-index.md"],
+      },
+      {
+        relativePath: "resources/area/_das-index.md",
+        node: {
+          name: "Area",
+          body: "",
+          children: [],
+          subtreeTokens: 0,
+          segment: "area",
+        },
+        role: "index",
+        childPaths: ["resources/area/page.md"],
+      },
+      {
+        relativePath: "resources/area/page.md",
+        node: {
+          name: "Page",
+          body: "",
+          children: [],
+          subtreeTokens: 0,
+          source: {
+            relativePath: "area/page.md",
+            raw: "# Page\n",
+            content: "# Page\n",
+            frontmatter: {},
+          },
+        },
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const skillMd = contentFor(files, "SKILL.md");
+    const nested = contentFor(files, "resources/area/_das-index.md");
+
+    expect(skillMd).toContain("## Using this skill");
+    expect(skillMd).toContain("grep works on them directly");
+    expect(skillMd.indexOf("## Using this skill")).toBeLessThan(
+      skillMd.indexOf("- [Area]"),
+    );
+
+    // Repeating it in every index would cost tokens at every level.
+    expect(nested).not.toContain("## Using this skill");
+  });
+
   it("quotes a skill name containing a colon in frontmatter", () => {
     const contextWithColon: RenderContext = {
       skillName: "widget: the docs",

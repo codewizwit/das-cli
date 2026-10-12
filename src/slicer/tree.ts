@@ -166,6 +166,19 @@ const folderReadmeNamePattern = /^readme\.(md|mdx|markdown)$/i;
  *
  * @param folderNode - A folder node to attach a landing page to, mutated in place
  */
+/**
+ * True when this file name is a folder's landing page, `index` or `readme`.
+ *
+ * Exported so the CLI can find the root's own landing page, which the tree
+ * deliberately does not attach to the root node.
+ */
+export function isLandingPageName(fileName: string): boolean {
+  return (
+    folderIndexNamePattern.test(fileName) ||
+    folderReadmeNamePattern.test(fileName)
+  );
+}
+
 function attachFolderLandingPage(folderNode: DocNode): void {
   const matches = (node: DocNode, pattern: RegExp): boolean => {
     const relativePath = node.source?.relativePath;

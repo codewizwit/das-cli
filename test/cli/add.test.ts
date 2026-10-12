@@ -391,7 +391,7 @@ describe("runAdd", () => {
     expect(spies.saveManifest).not.toHaveBeenCalled();
   });
 
-  it("defaults the description to the neutral template", async () => {
+  it("defaults the description to a trigger condition over the corpus's own subjects", async () => {
     const { deps, spies } = createFakeDeps();
 
     await runAdd(baseArgs(), deps);
@@ -401,9 +401,12 @@ describe("runAdd", () => {
       EmissionPlan,
       RenderContext,
     ];
+    // It says when to reach for the skill, and carries no source path: this
+    // field is matched against a user's question.
     expect(context.description).toBe(
-      "Reference documentation for docs, sliced from /repo/docs. Covers: Getting Started, API Reference.",
+      "Use for questions about Getting Started, API Reference.",
     );
+    expect(context.description).not.toContain("/repo/docs");
     expect(dasJsonData.name).toBe("docs");
   });
 

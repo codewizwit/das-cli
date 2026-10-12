@@ -36,6 +36,15 @@ export interface AddArgs {
   hook?: boolean;
   /** Accept every default non-interactively; still aborts on scan findings or an unforced collision. */
   yes?: boolean;
+  /**
+   * Proceed past injection scan findings without a human confirming them.
+   *
+   * An acknowledgement, never a silencing: the scan still runs and still
+   * prints every finding. It exists because a corpus that documents prompt
+   * injection contains the patterns it documents, so such a source could not
+   * be converted non-interactively at all, which rules out any CI use.
+   */
+  acceptScanFindings?: boolean;
   /** Include files over the 1MB size guard. Defaults to `false`. */
   includeLarge?: boolean;
   /** Per-file token budget. Defaults to {@link DEFAULT_TOKEN_BUDGET}. */
@@ -472,12 +481,12 @@ export async function runAdd(
     }
   }
 
-  if (findings.length > 0) {
+  if (findings.length > 0 && args.acceptScanFindings !== true) {
     if (yes) {
       return {
         status: "aborted",
         reason:
-          "Injection scan flagged content in the generated skill; aborting because --yes was passed. Re-run interactively to review and confirm.",
+          "Injection scan flagged content in the generated skill; aborting because --yes was passed. Re-run interactively to review and confirm, or pass --accept-scan-findings to proceed.",
       };
     }
 

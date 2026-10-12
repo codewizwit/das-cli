@@ -247,6 +247,7 @@ interface AddCommandOptions {
   description?: string;
   hook: boolean;
   yes?: boolean;
+  acceptScanFindings?: boolean;
   includeLarge?: boolean;
   tokenBudget?: number;
   force?: boolean;
@@ -262,6 +263,9 @@ function toAddArgs(source: string, options: AddCommandOptions): AddArgs {
       : {}),
     hook: options.hook,
     ...(options.yes !== undefined ? { yes: options.yes } : {}),
+    ...(options.acceptScanFindings !== undefined
+      ? { acceptScanFindings: options.acceptScanFindings }
+      : {}),
     ...(options.includeLarge !== undefined
       ? { includeLarge: options.includeLarge }
       : {}),
@@ -378,6 +382,10 @@ export function createProgram(): Command {
     .option("--description <text>", "skill description")
     .option("--no-hook", "skip the SessionStart hook prompt and install")
     .option("--yes", "accept every default non-interactively")
+    .option(
+      "--accept-scan-findings",
+      "proceed past injection scan findings instead of stopping; the scan still runs and still reports them",
+    )
     .option(
       "--include-large",
       "include files over the 1MB size guard instead of skipping them",

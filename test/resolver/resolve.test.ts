@@ -100,6 +100,7 @@ describe("resolveSource", () => {
       expect(result).toEqual([
         {
           relativePath: "notes.md",
+          raw: "# Notes\n\nBody text.",
           content: "# Notes\n\nBody text.",
           frontmatter: {},
         },
@@ -141,6 +142,7 @@ describe("resolveSource", () => {
       expect(result).toEqual([
         {
           relativePath: "notes.md",
+          raw: "Pinned body",
           content: "Pinned body",
           frontmatter: {},
         },
@@ -167,6 +169,7 @@ describe("resolveSource", () => {
       expect(result).toEqual([
         {
           relativePath: "notes.md",
+          raw: "HEAD body",
           content: "HEAD body",
           frontmatter: {},
         },
@@ -203,6 +206,7 @@ describe("resolveSource", () => {
       expect(result).toEqual([
         {
           relativePath: "intro.md",
+          raw: "Intro body",
           content: "Intro body",
           frontmatter: {},
         },

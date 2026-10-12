@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { DocFile } from "../../src/types.js";
 import { hashFileset } from "../../src/state/hash.js";
 
-function docFile(relativePath: string, content: string): DocFile {
-  return { relativePath, content, frontmatter: {} };
+function docFile(
+  relativePath: string,
+  content: string,
+  raw: string = content,
+): DocFile {
+  return { relativePath, raw, content, frontmatter: {} };
 }
 
 const defaultParams = {
@@ -17,6 +21,19 @@ describe("hashFileset", () => {
     const digest = hashFileset([docFile("a.md", "hello")], defaultParams);
 
     expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+  });
+
+  it("tracks the source bytes, not the body the slicer reads", () => {
+    const withImport = docFile(
+      "a.mdx",
+      "# Title",
+      'import X from "x";\n\n# Title',
+    );
+    const withoutImport = docFile("a.mdx", "# Title", "# Title");
+
+    expect(hashFileset([withImport], defaultParams)).not.toBe(
+      hashFileset([withoutImport], defaultParams),
+    );
   });
 
   it("is order-independent over the fileset", () => {

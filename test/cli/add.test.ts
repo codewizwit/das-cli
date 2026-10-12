@@ -23,6 +23,7 @@ const FAKE_PROJECT_ROOT = "/repo/project";
 
 const docFile: DocFile = {
   relativePath: "intro.md",
+  raw: "# Intro\n\nHello.",
   content: "# Intro\n\nHello.",
   frontmatter: {},
 };

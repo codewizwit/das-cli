@@ -91,7 +91,7 @@ async function processMarkdownFile(
     return null;
   }
 
-  return { relativePath, content, frontmatter };
+  return { relativePath, raw, content, frontmatter };
 }
 
 async function walkDirectory(

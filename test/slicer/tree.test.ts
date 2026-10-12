@@ -7,6 +7,7 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw: "# Introduction\n\nWelcome to the docs.",
         content: "# Introduction\n\nWelcome to the docs.",
         frontmatter: { title: "Getting Started" },
       },
@@ -22,6 +23,7 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw: "# Introduction\n\nWelcome to the docs.",
         content: "# Introduction\n\nWelcome to the docs.",
         frontmatter: {},
       },
@@ -36,6 +38,7 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "getting-started.md",
+        raw: "Just some prose with no headings.",
         content: "Just some prose with no headings.",
         frontmatter: {},
       },
@@ -50,6 +53,8 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw:
+          "This is preamble text.\n\n# Introduction\n\nBody after heading.",
         content:
           "This is preamble text.\n\n# Introduction\n\nBody after heading.",
         frontmatter: {},
@@ -65,6 +70,8 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw:
+          "# Introduction\n\nIntro body.\n\n### Details\n\nDetails body.",
         content:
           "# Introduction\n\nIntro body.\n\n### Details\n\nDetails body.",
         frontmatter: {},
@@ -89,6 +96,8 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw:
+          "# First Section\n\nFirst body.\n\n# Second Section\n\nSecond body.",
         content:
           "# First Section\n\nFirst body.\n\n# Second Section\n\nSecond body.",
         frontmatter: {},
@@ -112,16 +121,19 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "guides/setup.md",
+        raw: "# Setup\n\nSetup body.",
         content: "# Setup\n\nSetup body.",
         frontmatter: {},
       },
       {
         relativePath: "api-reference/overview.md",
+        raw: "# Overview\n\nOverview body.",
         content: "# Overview\n\nOverview body.",
         frontmatter: {},
       },
       {
         relativePath: "guides/advanced.md",
+        raw: "# Advanced\n\nAdvanced body.",
         content: "# Advanced\n\nAdvanced body.",
         frontmatter: {},
       },
@@ -150,6 +162,7 @@ describe("buildTree", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
+        raw: "# Introduction\n\n```\n# not a heading\n```\n\nReal prose.",
         content: "# Introduction\n\n```\n# not a heading\n```\n\nReal prose.",
         frontmatter: {},
       },

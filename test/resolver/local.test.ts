@@ -28,10 +28,34 @@ describe("resolveLocal", () => {
     expect(result).toEqual([
       {
         relativePath: "notes.md",
+        raw: "# Notes\n\nSome content.",
         content: "# Notes\n\nSome content.",
         frontmatter: {},
       },
     ]);
+  });
+
+  it("keeps the source bytes verbatim, including frontmatter and MDX syntax", async () => {
+    const source = [
+      "---",
+      "title: Install",
+      "---",
+      "",
+      'import Tabs from "@theme/Tabs";',
+      "",
+      "# Install",
+      "",
+      ":::note",
+      "Read me.",
+      ":::",
+      "",
+    ].join("\n");
+    const filePath = join(fixtureRoot, "install.mdx");
+    await writeFile(filePath, source);
+
+    const result = await resolveLocal(filePath, { includeLarge: false });
+
+    expect(result[0]?.raw).toBe(source);
   });
 
   it("recurses a folder and includes .md, .mdx, and .markdown case-insensitively, depth-first in order", async () => {
@@ -66,6 +90,7 @@ describe("resolveLocal", () => {
     ]);
     expect(result[0]).toEqual({
       relativePath: "README.md",
+      raw: "# Project\n\nOverview.",
       content: "# Project\n\nOverview.",
       frontmatter: {},
     });

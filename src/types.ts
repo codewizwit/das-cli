@@ -12,7 +12,19 @@ export interface Frontmatter {
 export interface DocFile {
   /** Path relative to the resolved source root, using forward slashes. */
   relativePath: string;
-  /** Document body with frontmatter removed. */
+  /**
+   * The entire source file exactly as read, frontmatter included.
+   *
+   * This is what gets emitted as a resource and what the source hash covers,
+   * so it must never be rewritten. MDX syntax is left intact.
+   */
+  raw: string;
+  /**
+   * Document body with frontmatter removed and MDX syntax stripped.
+   *
+   * This is what the slicer reads to build the tree. It is a derivative, so
+   * nothing that must match the source byte for byte may be built from it.
+   */
   content: string;
   /** Frontmatter parsed from the file, or an empty object when absent. */
   frontmatter: Frontmatter;

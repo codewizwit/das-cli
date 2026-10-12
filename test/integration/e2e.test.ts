@@ -1,9 +1,10 @@
 import {
   cp,
   lstat,
+  mkdir,
   mkdtemp,
-  readdir,
   readFile,
+  readdir,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -57,7 +58,11 @@ import {
   rebuildManifest,
   saveManifest,
 } from "../../src/state/manifest.js";
-import type { DocFile, SourceRef } from "../../src/types.js";
+import {
+  GENERATED_INDEX_FILE_NAME,
+  type DocFile,
+  type SourceRef,
+} from "../../src/types.js";
 
 const FIXTURE_SITE_DIR = fileURLToPath(
   new URL("../fixtures/site", import.meta.url),
@@ -404,7 +409,7 @@ describe("das-cli end-to-end", () => {
     // never split: every emitted directory carries an index.md listing what
     // sits beside it, and SKILL.md indexes the top level.
     // SKILL.md is the index for resources/ itself, so every directory BELOW
-    // it carries an index.md listing what sits beside it.
+    // it carries a generated index listing what sits beside it.
     expect([...splitDirectories.keys()].sort()).toEqual([
       "resources",
       "resources/api",
@@ -414,7 +419,10 @@ describe("das-cli end-to-end", () => {
       if (directory === "resources") {
         continue;
       }
-      expect(entries, `${directory} has no index.md`).toContain("index.md");
+      expect(
+        entries,
+        `${directory} has no ${GENERATED_INDEX_FILE_NAME}`,
+      ).toContain(GENERATED_INDEX_FILE_NAME);
     }
 
     const skillChildLinks = skillMd
@@ -562,6 +570,86 @@ describe("das-cli end-to-end", () => {
       );
       expect(lines[1]).toBe("");
       expect(lines.slice(2).join("\n")).toBe(source.raw);
+    }
+  });
+
+  it("keeps a folder's own index.md a pure byte copy and puts the listing beside it", async () => {
+    const corpus = await mkdtemp(join(tmpdir(), "das-e2e-corpus-"));
+    await mkdir(join(corpus, "architecture", "data"), { recursive: true });
+    const sources = new Map<string, string>([
+      [
+        "README.md",
+        "---\ntitle: Handbook\ndescription: How we build.\n---\n\n# Handbook\n",
+      ],
+      [
+        "architecture/index.md",
+        "---\ntitle: Architecture\ndescription: How the system is shaped.\n---\n\n# Architecture\n\nShape and reasons.\n",
+      ],
+      [
+        "architecture/overview.md",
+        "---\ntitle: System Overview\ndescription: The five services.\n---\n\n# System Overview\n",
+      ],
+      [
+        "architecture/data/model.md",
+        "---\ntitle: Data Model\n---\n\n# Data Model\n\n## Entities\n",
+      ],
+    ]);
+    for (const [relativePath, content] of sources) {
+      await writeFile(join(corpus, relativePath), content, "utf-8");
+    }
+
+    try {
+      const clock = createClock("2026-07-24T00:00:00.000Z");
+      const deps = buildRealDeps({
+        home: tempHome,
+        gitRunner: createCloningGitRunner(corpus),
+        lsRemote: createShaProvider(SHA_A).lsRemote,
+        now: clock.now,
+      });
+
+      const outcome = await runAdd(
+        {
+          source: corpus,
+          scope: "personal",
+          yes: true,
+          hook: false,
+          tokenBudget: TOKEN_BUDGET,
+        },
+        deps.addDeps,
+      );
+      expect(outcome.status).toBe("written");
+      if (outcome.status !== "written") {
+        throw new Error("expected runAdd to succeed");
+      }
+
+      const skillFiles = await readSkillFiles(outcome.skillPath);
+
+      // Every source file, index.md included, is exactly its own bytes.
+      for (const [relativePath, content] of sources) {
+        const emitted = skillFiles.get(`resources/${relativePath}`);
+        expect(emitted, `no resource at resources/${relativePath}`).toBeDefined();
+        const lines = (emitted ?? "").split("\n");
+        expect(lines.slice(2).join("\n")).toBe(content);
+      }
+
+      // das's listing sits beside it under a name das owns, and lists the
+      // landing page as an ordinary entry.
+      const folderIndex = skillFiles.get(
+        "resources/architecture/_das-index.md",
+      );
+      expect(folderIndex).toBeDefined();
+      expect(folderIndex).toContain("- [Architecture](index.md)");
+      expect(folderIndex).toContain("How the system is shaped.");
+      expect(folderIndex).toContain("- [System Overview](overview.md)");
+      expect(folderIndex).toContain("- [data](data/_das-index.md)");
+
+      // The parent names the folder from its landing page, not its segment.
+      const skillMd = skillFiles.get("SKILL.md") ?? "";
+      expect(skillMd).toContain(
+        "- [Architecture](resources/architecture/_das-index.md) — How the system is shaped.",
+      );
+    } finally {
+      await rm(corpus, { recursive: true, force: true });
     }
   });
 

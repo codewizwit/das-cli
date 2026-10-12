@@ -10,7 +10,7 @@ import {
   resolveSource,
   SourceTooLargeError,
 } from "../../src/resolver/resolve.js";
-import type { SourceRef } from "../../src/types.js";
+import { GENERATED_INDEX_FILE_NAME, type SourceRef } from "../../src/types.js";
 
 const repoUrl = "https://github.com/octocat/hello-world.git";
 const pinnedSha = "1111111111111111111111111111111111111111";
@@ -75,6 +75,27 @@ async function writeFlatMarkdownFiles(
 }
 
 describe("resolveSource", () => {
+  it("refuses a source file whose name das uses for its generated indexes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "das-clash-"));
+    try {
+      await writeFile(join(dir, "intro.md"), "# Intro\n", "utf-8");
+      await writeFile(
+        join(dir, GENERATED_INDEX_FILE_NAME),
+        "# Clash\n",
+        "utf-8",
+      );
+
+      await expect(
+        resolveSource(
+          { type: "path", path: dir, kind: "folder" },
+          { includeLarge: false },
+        ),
+      ).rejects.toThrow(/_das-index\.md/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   let fixtureRoot: string;
 
   beforeEach(async () => {

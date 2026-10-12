@@ -417,7 +417,7 @@ describe("planEmission", () => {
       );
       expect(skillFile?.childPaths.length).toBeGreaterThan(0);
       for (const childPath of skillFile?.childPaths ?? []) {
-        expect(childPath).toMatch(/^resources\/group-\d+\/index\.md$/);
+        expect(childPath).toMatch(/^resources\/group-\d+\/_das-index\.md$/);
       }
     });
 

@@ -131,25 +131,10 @@ function renderFramedFile(
   context: RenderContext,
   filesByPath: Map<string, PlannedFile>,
 ): string {
-  const structural = renderStructuralContent(file, filesByPath);
-  const landing = file.node.source?.raw;
-
-  if (landing !== undefined) {
-    // The landing page is emitted byte for byte directly after the frame, so
-    // the separator before das's listing accounts for whatever newline the
-    // source already ends with rather than trimming it.
-    const head = `${frameLine(context.sourceLabel)}\n\n${landing}`;
-    if (structural === "") {
-      return head.endsWith("\n") ? head : `${head}\n`;
-    }
-    const separator = landing.endsWith("\n") ? "\n" : "\n\n";
-    return `${head}${separator}${structural}\n`;
-  }
-
   const sections = [
     frameLine(context.sourceLabel),
     file.node.body,
-    structural,
+    renderStructuralContent(file, filesByPath),
   ].filter((section) => section !== "");
 
   return `${sections.join("\n\n")}\n`;
@@ -172,9 +157,7 @@ function renderPlannedFile(
   context: RenderContext,
   filesByPath: Map<string, PlannedFile>,
 ): string {
-  // A resource is a document with nothing of das's appended. A folder that
-  // adopted its own index.md has both, and is rendered as a framed index.
-  if (file.node.source !== undefined && file.childPaths.length === 0) {
+  if (file.node.source !== undefined) {
     return renderResourceFile(file.node.source, context);
   }
 

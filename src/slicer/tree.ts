@@ -147,19 +147,21 @@ const folderReadmeNamePattern = /^readme\.(md|mdx|markdown)$/i;
 /**
  * Move a folder's own landing page onto the folder node.
  *
- * A folder's `index.md`, or its `README.md` when there is no `index.md`,
- * wants the same emitted path as the folder's generated index, because
- * Docusaurus treats that file as the category's landing page. Rather than one
- * overwriting the other, the folder node adopts it: the emitted index is that
- * file followed by the generated listing, and the file stops appearing as an
- * entry in the listing it heads.
+ * Docusaurus treats a folder's `index.md`, or its `README.md` when there is
+ * no `index.md`, as that category's landing page, which makes it the one file
+ * in the folder that describes the folder. das reads it for the folder's
+ * display name and description.
  *
- * The root is excluded by the caller, because `SKILL.md` is the root's index
- * and carries its own required frontmatter.
+ * It is only read. The page is still emitted as an ordinary resource at its
+ * own path and still appears as an entry in the folder's listing, because
+ * das's generated index has a name of its own and never competes for a
+ * source file's path.
  *
- * @param folderNode - A folder node to hoist a landing page onto, mutated in place
+ * The root is excluded by the caller, since `SKILL.md` is the root's index.
+ *
+ * @param folderNode - A folder node to attach a landing page to, mutated in place
  */
-function hoistFolderIndexPage(folderNode: DocNode): void {
+function attachFolderLandingPage(folderNode: DocNode): void {
   const matches = (node: DocNode, pattern: RegExp): boolean => {
     const relativePath = node.source?.relativePath;
     if (relativePath === undefined) {
@@ -181,10 +183,15 @@ function hoistFolderIndexPage(folderNode: DocNode): void {
     return;
   }
 
-  folderNode.source = landingSource;
-  folderNode.children = folderNode.children.filter(
-    (child) => child !== landing,
-  );
+  folderNode.landing = landingSource;
+
+  // The page that describes the folder leads the folder's listing. This is
+  // structural, not a ranking: there is exactly one landing page and it is
+  // the most orienting thing in the folder.
+  folderNode.children = [
+    landing,
+    ...folderNode.children.filter((child) => child !== landing),
+  ];
 
   // The folder's display name comes from its landing page when that page
   // declares one. `resolveFileName` falls back to the humanized file name,
@@ -238,7 +245,7 @@ export function buildTree(files: DocFile[], rootName: string): DocNode {
 
   for (const [folderPath, folderNode] of folderNodesByPath) {
     if (folderPath !== "") {
-      hoistFolderIndexPage(folderNode);
+      attachFolderLandingPage(folderNode);
     }
   }
 

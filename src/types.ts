@@ -20,6 +20,16 @@ export interface Frontmatter {
   tags?: string[];
 }
 
+/**
+ * File name das gives every generated index.
+ *
+ * Deliberately a name no documentation corpus uses, so a generated index can
+ * never collide with a source file and every emitted resource stays byte
+ * identical to its source. The leading underscore also keeps Docusaurus from
+ * routing it if a generated skill ever lives inside a docs site.
+ */
+export const GENERATED_INDEX_FILE_NAME = "_das-index.md";
+
 /** A single Markdown source file with its frontmatter separated from its body. */
 export interface DocFile {
   /** Path relative to the resolved source root, using forward slashes. */
@@ -64,6 +74,16 @@ export interface DocNode {
    * {@link DocFile.raw} verbatim instead of rendering the node.
    */
   source?: DocFile;
+  /**
+   * A folder's own landing page, its `index.md` or `README.md`, when it has
+   * one. Set only on folder nodes.
+   *
+   * Read for the folder's display name and description. The page itself is
+   * still emitted as an ordinary resource at its own path and still appears
+   * as an entry in the folder's listing, so nothing here affects what is
+   * written where.
+   */
+  landing?: DocFile;
   /**
    * Final path segment of the source folder, set only on folder nodes.
    *

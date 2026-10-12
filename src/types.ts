@@ -6,6 +6,18 @@ export interface Frontmatter {
   sidebarPosition?: number;
   /** When true, the document is excluded from the generated skill. */
   draft?: boolean;
+  /**
+   * Authored one-line summary, used verbatim as this document's index entry.
+   *
+   * Preferred over anything das derives. Docusaurus defines the default for
+   * this field as the first line of Markdown content, which is the fallback
+   * das applies when it is absent.
+   */
+  description?: string;
+  /** Authored search keywords, a synonym source for an index entry. */
+  keywords?: string[];
+  /** Authored tags, a synonym source for an index entry. */
+  tags?: string[];
 }
 
 /** A single Markdown source file with its frontmatter separated from its body. */

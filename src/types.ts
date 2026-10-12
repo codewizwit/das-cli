@@ -1,3 +1,5 @@
+import type { CategoryMeta } from "./markdown/category.js";
+
 /** Parsed YAML frontmatter fields recognized by DAS. */
 export interface Frontmatter {
   /** Document title, if declared in frontmatter. */
@@ -84,6 +86,15 @@ export interface DocNode {
    * written where.
    */
   landing?: DocFile;
+  /**
+   * A folder's authored category metadata, from `_category_.json` or
+   * `_category_.yml`. Set only on folder nodes.
+   *
+   * For a folder with no landing page this is its only authored description,
+   * which is why das reads it rather than settling for a humanized directory
+   * name.
+   */
+  category?: CategoryMeta;
   /**
    * Final path segment of the source folder, set only on folder nodes.
    *

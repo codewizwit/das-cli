@@ -270,6 +270,73 @@ describe("a folder's own landing page", () => {
   });
 });
 
+describe("a folder's category metadata", () => {
+  const page = (relativePath: string): DocFile => ({
+    relativePath,
+    raw: `# ${relativePath}\n`,
+    content: `# ${relativePath}\n`,
+    frontmatter: {},
+  });
+
+  const categoryFile = (relativePath: string, json: unknown): DocFile => ({
+    relativePath,
+    raw: JSON.stringify(json),
+    content: JSON.stringify(json),
+    frontmatter: {},
+  });
+
+  it("names and describes the folder, and is not emitted as a document", () => {
+    const tree = buildTree(
+      [
+        categoryFile("architecture/_category_.json", {
+          label: "Architecture",
+          customProps: { description: "How the system is shaped." },
+        }),
+        page("architecture/overview.md"),
+      ],
+      "root",
+    );
+    const folder = tree.children[0]!;
+
+    expect(folder.name).toBe("Architecture");
+    expect(folder.category?.description).toBe("How the system is shaped.");
+    expect(folder.children.map((child) => child.source?.relativePath)).toEqual([
+      "architecture/overview.md",
+    ]);
+  });
+
+  it("lets an explicit category label win over a landing page's title", () => {
+    const tree = buildTree(
+      [
+        categoryFile("architecture/_category_.json", { label: "From category" }),
+        {
+          relativePath: "architecture/index.md",
+          raw: "---\ntitle: From landing page\n---\n\n# Heading\n",
+          content: "# Heading\n",
+          frontmatter: { title: "From landing page" },
+        },
+      ],
+      "root",
+    );
+
+    expect(tree.children[0]?.name).toBe("From category");
+  });
+
+  it("keeps a malformed category file from breaking the tree", () => {
+    const tree = buildTree(
+      [
+        categoryFile("architecture/_category_.json", null),
+        page("architecture/overview.md"),
+      ],
+      "root",
+    );
+    const folder = tree.children[0]!;
+
+    expect(folder.name).toBe("architecture");
+    expect(folder.children).toHaveLength(1);
+  });
+});
+
 describe("collapseSingleChildChains", () => {
   it("collapses a chain of empty-body single-child nodes into one node carrying the deepest node's content", () => {
     const leaf: DocNode = {

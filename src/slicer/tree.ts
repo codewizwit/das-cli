@@ -1,3 +1,8 @@
+import {
+  isCategoryFileName,
+  parseCategoryMeta,
+  type CategoryMeta,
+} from "../markdown/category.js";
 import type { DocFile, DocNode } from "../types.js";
 
 const headingLinePattern = /^(#{1,6})\s+(.*)$/;
@@ -193,15 +198,52 @@ function attachFolderLandingPage(folderNode: DocNode): void {
     ...folderNode.children.filter((child) => child !== landing),
   ];
 
-  // The folder's display name comes from its landing page when that page
-  // declares one. `resolveFileName` falls back to the humanized file name,
-  // which for this file is "index" or "readme" and says less than the
-  // folder's own segment, so that case keeps the segment.
+  // An explicit `label` in the folder's category file is a deliberate
+  // override, which is how Docusaurus treats it, so the landing page only
+  // names the folder when no label was authored.
+  if (folderNode.category?.label !== undefined) {
+    return;
+  }
+
+  // `resolveFileName` falls back to the humanized file name, which for this
+  // file is "index" or "readme" and says less than the folder's own segment,
+  // so that case keeps the segment.
   const landingName = landing.name.trim();
   const humanizedFileName = humanize(fileBaseName(landingSource.relativePath));
   if (landingName !== "" && landingName !== humanizedFileName) {
     folderNode.name = landingName;
   }
+}
+
+/**
+ * Split a fileset into documents and the folders' category metadata.
+ *
+ * A category file is source metadata, never a document, so it is read for the
+ * folder it sits in and then dropped rather than emitted.
+ */
+function partitionCategoryFiles(files: DocFile[]): {
+  documents: DocFile[];
+  categoriesByFolder: Map<string, CategoryMeta>;
+} {
+  const documents: DocFile[] = [];
+  const categoriesByFolder = new Map<string, CategoryMeta>();
+
+  for (const file of files) {
+    const segments = file.relativePath.split("/");
+    const fileName = segments[segments.length - 1] ?? "";
+
+    if (!isCategoryFileName(fileName)) {
+      documents.push(file);
+      continue;
+    }
+
+    categoriesByFolder.set(
+      segments.slice(0, -1).join("/"),
+      parseCategoryMeta(file.raw, fileName),
+    );
+  }
+
+  return { documents, categoriesByFolder };
 }
 
 export function buildTree(files: DocFile[], rootName: string): DocNode {
@@ -212,8 +254,9 @@ export function buildTree(files: DocFile[], rootName: string): DocNode {
     subtreeTokens: 0,
   };
   const folderNodesByPath = new Map<string, DocNode>([["", root]]);
+  const { documents, categoriesByFolder } = partitionCategoryFiles(files);
 
-  for (const file of files) {
+  for (const file of documents) {
     const segments = file.relativePath.split("/");
     const folderSegments = segments.slice(0, -1);
     let parentPath = "";
@@ -225,12 +268,14 @@ export function buildTree(files: DocFile[], rootName: string): DocNode {
       let folderNode = folderNodesByPath.get(folderPath);
 
       if (folderNode === undefined) {
+        const category = categoriesByFolder.get(folderPath);
         folderNode = {
-          name: humanize(segment),
+          name: category?.label ?? humanize(segment),
           body: "",
           children: [],
           subtreeTokens: 0,
           segment,
+          ...(category !== undefined ? { category } : {}),
         };
         parentNode.children.push(folderNode);
         folderNodesByPath.set(folderPath, folderNode);

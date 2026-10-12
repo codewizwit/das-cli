@@ -278,8 +278,8 @@ describe("renderSkillPlan", () => {
 
     // The shared boilerplate cannot route, so each entry falls through to
     // its own headings, which differ.
-    expect(lineFor("Data Model")).toContain("Entities, Migrations");
-    expect(lineFor("Event Bus")).toContain("Topics, Replay");
+    expect(lineFor("Data Model")).toContain("Entities; Migrations");
+    expect(lineFor("Event Bus")).toContain("Topics; Replay");
     expect(lineFor("Data Model")).not.toContain("Acme handbook");
     expect(lineFor("Event Bus")).not.toContain("Acme handbook");
 
@@ -325,7 +325,7 @@ describe("renderSkillPlan", () => {
 
     const content = contentFor(files, "SKILL.md");
 
-    expect(content).toContain("— Overview, Design, Trade-offs");
+    expect(content).toContain("— Overview; Design; Trade-offs");
     expect(content).not.toContain("— Data Model");
   });
 
@@ -363,7 +363,7 @@ describe("renderSkillPlan", () => {
 
     expect(content).toContain("- [Alpha](resources/a.md)\n");
     expect(content).toContain("- [Beta](resources/b.md)");
-    expect(content).not.toContain("Overview, Design");
+    expect(content).not.toContain("Overview; Design");
   });
 
   it("renders a generated folder index as the frame plus its listing only", () => {

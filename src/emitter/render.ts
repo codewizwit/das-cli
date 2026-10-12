@@ -107,6 +107,9 @@ function renderTableOfContents(
   );
   const descriptions = resolveEntryDescriptions(
     children.map((child) => child.node),
+    // SKILL.md is the file an agent always reads and often the only one, so
+    // its entries carry a second level of the corpus's own vocabulary.
+    { includeContents: file.role === "skill" },
   );
 
   const lines = children.map((child, index) => {

@@ -74,6 +74,10 @@ function listableChildren(node: DocNode): DocNode[] {
  * Entries are taken in authored order until the budget is spent, never
  * selected by relevance: das orders nothing and ranks nothing. A truncated
  * list says so, so a reader can tell the remainder exists.
+ *
+ * Joined with semicolons rather than commas, because authored titles contain
+ * commas ("das, first run on a real corpus") and a comma-joined list of them
+ * cannot be read back into its entries.
  */
 function contentsListing(node: DocNode): string {
   const names = listableChildren(node)
@@ -86,7 +90,7 @@ function contentsListing(node: DocNode): string {
 
   const included: string[] = [];
   for (const name of names) {
-    if ([...included, name].join(", ").length > maxDescriptionChars) {
+    if ([...included, name].join("; ").length > maxDescriptionChars) {
       break;
     }
     included.push(name);
@@ -97,8 +101,8 @@ function contentsListing(node: DocNode): string {
   }
 
   return included.length === names.length
-    ? included.join(", ")
-    : `${included.join(", ")}, and ${String(names.length - included.length)} more`;
+    ? included.join("; ")
+    : `${included.join("; ")}; and ${String(names.length - included.length)} more`;
 }
 
 function countOccurrences(values: string[]): Map<string, number> {
@@ -138,16 +142,38 @@ function countOccurrences(values: string[]): Map<string, number> {
  * @param nodes - The entries of a single index, in the order they are listed
  * @returns One description per entry, positionally matching `nodes`
  */
-export function resolveEntryDescriptions(nodes: DocNode[]): string[] {
+/**
+ * Options controlling how much each entry says.
+ */
+export interface DescribeOptions {
+  /**
+   * Append what an entry contains to its authored description.
+   *
+   * Used for the root index only. An agent lands on SKILL.md first and often
+   * never descends, so naming the subsections there puts two levels of the
+   * corpus's own vocabulary in the first file read. Deeper indexes leave it
+   * off, because there the contents are one hop away and repeating them
+   * duplicates the index below.
+   */
+  includeContents?: boolean;
+}
+
+export function resolveEntryDescriptions(
+  nodes: DocNode[],
+  options: DescribeOptions = {},
+): string[] {
   const paragraphs = nodes.map(firstParagraph);
   const listings = nodes.map(contentsListing);
   const paragraphCounts = countOccurrences(paragraphs);
   const listingCounts = countOccurrences(listings);
 
   return nodes.map((node, index) => {
+    const listing = listings[index] ?? "";
     const authored = authoredDescription(node);
     if (authored !== undefined) {
-      return authored;
+      return options.includeContents === true && listing !== ""
+        ? `${authored} Contains: ${listing}.`
+        : authored;
     }
 
     const paragraph = paragraphs[index] ?? "";
@@ -155,7 +181,6 @@ export function resolveEntryDescriptions(nodes: DocNode[]): string[] {
       return paragraph;
     }
 
-    const listing = listings[index] ?? "";
     if (listing !== "" && listingCounts.get(listing) === 1) {
       return listing;
     }

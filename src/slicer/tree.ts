@@ -141,6 +141,62 @@ function buildFileNode(file: DocFile): DocNode {
  * @param rootName - The name assigned to the tree's root node
  * @returns The root node of the normalized tree
  */
+const folderIndexNamePattern = /^index\.(md|mdx|markdown)$/i;
+const folderReadmeNamePattern = /^readme\.(md|mdx|markdown)$/i;
+
+/**
+ * Move a folder's own landing page onto the folder node.
+ *
+ * A folder's `index.md`, or its `README.md` when there is no `index.md`,
+ * wants the same emitted path as the folder's generated index, because
+ * Docusaurus treats that file as the category's landing page. Rather than one
+ * overwriting the other, the folder node adopts it: the emitted index is that
+ * file followed by the generated listing, and the file stops appearing as an
+ * entry in the listing it heads.
+ *
+ * The root is excluded by the caller, because `SKILL.md` is the root's index
+ * and carries its own required frontmatter.
+ *
+ * @param folderNode - A folder node to hoist a landing page onto, mutated in place
+ */
+function hoistFolderIndexPage(folderNode: DocNode): void {
+  const matches = (node: DocNode, pattern: RegExp): boolean => {
+    const relativePath = node.source?.relativePath;
+    if (relativePath === undefined) {
+      return false;
+    }
+    return pattern.test(relativePath.split("/").pop() ?? "");
+  };
+
+  const landing =
+    folderNode.children.find((child) =>
+      matches(child, folderIndexNamePattern),
+    ) ??
+    folderNode.children.find((child) =>
+      matches(child, folderReadmeNamePattern),
+    );
+
+  const landingSource = landing?.source;
+  if (landing === undefined || landingSource === undefined) {
+    return;
+  }
+
+  folderNode.source = landingSource;
+  folderNode.children = folderNode.children.filter(
+    (child) => child !== landing,
+  );
+
+  // The folder's display name comes from its landing page when that page
+  // declares one. `resolveFileName` falls back to the humanized file name,
+  // which for this file is "index" or "readme" and says less than the
+  // folder's own segment, so that case keeps the segment.
+  const landingName = landing.name.trim();
+  const humanizedFileName = humanize(fileBaseName(landingSource.relativePath));
+  if (landingName !== "" && landingName !== humanizedFileName) {
+    folderNode.name = landingName;
+  }
+}
+
 export function buildTree(files: DocFile[], rootName: string): DocNode {
   const root: DocNode = {
     name: rootName,
@@ -178,6 +234,12 @@ export function buildTree(files: DocFile[], rootName: string): DocNode {
     }
 
     parentNode.children.push(buildFileNode(file));
+  }
+
+  for (const [folderPath, folderNode] of folderNodesByPath) {
+    if (folderPath !== "") {
+      hoistFolderIndexPage(folderNode);
+    }
   }
 
   return root;

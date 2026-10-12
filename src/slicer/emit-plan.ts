@@ -68,18 +68,8 @@ function describeChildren(
   parentDir: string,
 ): ChildDescriptor[] {
   return nodes.flatMap((node): ChildDescriptor[] => {
-    if (node.source !== undefined) {
-      return [
-        {
-          node,
-          name: node.name,
-          emitPath: `${parentDir}/${resourceFileName(node.source.relativePath)}`,
-          recurses: false,
-          ownDir: undefined,
-        },
-      ];
-    }
-
+    // A folder is checked first, because a folder that adopted its own
+    // index.md carries a source too and must still become an index.
     if (node.segment !== undefined) {
       const ownDir = `${parentDir}/${node.segment}`;
       return [
@@ -89,6 +79,18 @@ function describeChildren(
           emitPath: `${ownDir}/index.md`,
           recurses: true,
           ownDir,
+        },
+      ];
+    }
+
+    if (node.source !== undefined) {
+      return [
+        {
+          node,
+          name: node.name,
+          emitPath: `${parentDir}/${resourceFileName(node.source.relativePath)}`,
+          recurses: false,
+          ownDir: undefined,
         },
       ];
     }
@@ -305,8 +307,9 @@ function planIndexInto(
     oversizedIndexes,
   );
 
+  const ownContent = node.source?.raw ?? node.body;
   const ownFits =
-    estimateTokens(node.body) + estimateTokens(renderToc(topLevelItems)) <=
+    estimateTokens(ownContent) + estimateTokens(renderToc(topLevelItems)) <=
     budget;
 
   files.push({

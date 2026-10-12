@@ -366,6 +366,56 @@ describe("renderSkillPlan", () => {
     expect(content).not.toContain("Overview, Design");
   });
 
+  it("renders a folder index as its landing page verbatim, then the listing", () => {
+    const raw = "---\ntitle: Architecture\n---\n\n# Architecture\n\nHow the system is shaped.\n";
+    const files: PlannedFile[] = [
+      {
+        relativePath: "resources/architecture/index.md",
+        node: {
+          name: "Architecture",
+          body: "",
+          children: [],
+          subtreeTokens: 0,
+          segment: "architecture",
+          source: {
+            relativePath: "architecture/index.md",
+            raw,
+            content: "# Architecture\n\nHow the system is shaped.\n",
+            frontmatter: { title: "Architecture" },
+          },
+        },
+        role: "index",
+        childPaths: ["resources/architecture/overview.md"],
+      },
+      {
+        relativePath: "resources/architecture/overview.md",
+        node: {
+          name: "System Overview",
+          body: "",
+          children: [],
+          subtreeTokens: 0,
+          source: {
+            relativePath: "architecture/overview.md",
+            raw: "# System Overview\n\nThe five services.\n",
+            content: "# System Overview\n\nThe five services.\n",
+            frontmatter: {},
+          },
+        },
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "resources/architecture/index.md");
+
+    expect(content.split("\n")[0]).toMatch(/^> Reference material sliced from /);
+    // The landing page's bytes survive intact, directly after the frame.
+    expect(content).toContain(`\n\n${raw}`);
+    // ... and das's listing follows it.
+    const listingIndex = content.indexOf("- [System Overview](overview.md)");
+    expect(listingIndex).toBeGreaterThan(content.indexOf("How the system is shaped."));
+  });
+
   it("quotes a skill name containing a colon in frontmatter", () => {
     const contextWithColon: RenderContext = {
       skillName: "widget: the docs",

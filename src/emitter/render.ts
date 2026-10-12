@@ -18,18 +18,36 @@ export interface RenderContext {
 }
 
 /**
- * How to read the emitted tree, carried by SKILL.md only.
+ * How to reach an answer in the emitted tree, carried by SKILL.md only.
  *
  * Repeating it in every index would cost tokens at every level, and the
- * structure is self-evident once this has been read once. It names
- * {@link GENERATED_INDEX_FILE_NAME} so nothing has to be inferred from a file
- * name, and it says grep still works, because an agent that ignores the index
- * and searches the resources directly is on a path that already works.
+ * structure is self-evident once this has been read once.
+ *
+ * It is a routing rule rather than a routing table, so it duplicates nothing
+ * and cannot go stale against the tree. The order is what the measurement
+ * calls for: across 22 recorded runs, descents were already on the path to
+ * the answer 93% of the time, so misdirection is not the cost. The cost is
+ * depth, 3.8 index reads per answer, and six runs that descended the tree
+ * and then answered from grep anyway, spending 22 index reads for nothing.
+ * So the cheap routes are named first, and descent is kept for the case it
+ * is actually for: not knowing what the author called the thing.
+ *
+ * Opening a path directly is only sound because resources mirror the source
+ * tree, which is what makes a guessed path a real path.
+ *
+ * The trailing heading separates this rule's bullets from the entry list that
+ * follows, which would otherwise read as one list with no boundary.
  */
 const NAVIGATION_NOTE = [
   "## Using this skill",
   "",
-  `Each index lists what is one level down, with a short description of each entry. Entries linking to \`${GENERATED_INDEX_FILE_NAME}\` are further indexes; the rest are documents. Files under \`resources/\` are the unmodified source documentation, so grep works on them directly.`,
+  "`resources/` holds the unmodified source documentation at its original paths.",
+  "",
+  "- If the answer contains a distinctive term you can name, grep `resources/` for it.",
+  "- If you know roughly where it lives, open that path directly. The tree mirrors the source.",
+  `- Otherwise descend the indexes. Each lists what is one level down, with a description of each entry; entries linking to \`${GENERATED_INDEX_FILE_NAME}\` are further indexes.`,
+  "",
+  "## Contents",
 ].join("\n");
 
 const UNTRUSTED_CONTENT_NOTICE =

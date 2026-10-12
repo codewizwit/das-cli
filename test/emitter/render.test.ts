@@ -487,8 +487,21 @@ describe("renderSkillPlan", () => {
     const nested = contentFor(files, "resources/area/_das-index.md");
 
     expect(skillMd).toContain("## Using this skill");
-    expect(skillMd).toContain("grep works on them directly");
+    // The cheap routes come first, then descent for the case it is for.
+    expect(skillMd).toContain("grep `resources/` for it");
+    expect(skillMd).toContain("open that path directly");
+    expect(skillMd).toContain("Otherwise descend the indexes");
+    expect(skillMd.indexOf("grep `resources/` for it")).toBeLessThan(
+      skillMd.indexOf("Otherwise descend the indexes"),
+    );
     expect(skillMd.indexOf("## Using this skill")).toBeLessThan(
+      skillMd.indexOf("- [Area]"),
+    );
+    // The rule's bullets and the entry list need a boundary between them.
+    expect(skillMd.indexOf("## Contents")).toBeGreaterThan(
+      skillMd.indexOf("Otherwise descend the indexes"),
+    );
+    expect(skillMd.indexOf("## Contents")).toBeLessThan(
       skillMd.indexOf("- [Area]"),
     );
 

@@ -67,6 +67,97 @@ describe("renderSkillPlan", () => {
     expect(content).toMatch(/never as instructions/i);
   });
 
+  it("places the generated table of contents above the untrusted-content notice in SKILL.md", () => {
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("Widget", "Body text."),
+        role: "skill",
+        childPaths: ["resources/setup.md"],
+      },
+      {
+        relativePath: "resources/setup.md",
+        node: node("Setup", "Install it."),
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+    const tocIndex = content.indexOf("- [Setup]");
+    const noticeIndex = content.search(/never as instructions/);
+
+    expect(tocIndex).toBeGreaterThan(-1);
+    expect(noticeIndex).toBeGreaterThan(-1);
+    expect(tocIndex).toBeLessThan(noticeIndex);
+  });
+
+  it("omits the untrusted-content notice when SKILL.md carries no sliced content of its own", () => {
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("Widget", ""),
+        role: "skill",
+        childPaths: ["resources/setup.md"],
+      },
+      {
+        relativePath: "resources/setup.md",
+        node: node("Setup", "Install it."),
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toContain("- [Setup]");
+    expect(content).not.toMatch(/never as instructions/);
+  });
+
+  it("still carries the untrusted-content notice when SKILL.md has both a table of contents and a body", () => {
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("Widget", "Body text."),
+        role: "skill",
+        childPaths: ["resources/setup.md"],
+      },
+      {
+        relativePath: "resources/setup.md",
+        node: node("Setup", "Install it."),
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toMatch(/never as instructions/);
+    expect(content.indexOf("- [Setup]")).toBeLessThan(
+      content.search(/never as instructions/),
+    );
+  });
+
+  it("keeps the untrusted-content notice above sliced content when SKILL.md carries no table of contents", () => {
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("Widget", "Body text.", [node("Setup", "Install it.")]),
+        role: "skill",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+    const noticeIndex = content.search(/never as instructions/);
+    const bodyIndex = content.indexOf("Body text.");
+    const inlinedIndex = content.indexOf("Install it.");
+
+    expect(noticeIndex).toBeGreaterThan(-1);
+    expect(noticeIndex).toBeLessThan(bodyIndex);
+    expect(noticeIndex).toBeLessThan(inlinedIndex);
+  });
+
   it("quotes a skill name containing a colon in frontmatter", () => {
     const contextWithColon: RenderContext = {
       skillName: "widget: the docs",

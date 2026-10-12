@@ -123,14 +123,25 @@ function renderSkillFile(
     "---",
   ].join("\n");
 
-  const sections = [
-    frontmatter,
-    UNTRUSTED_CONTENT_NOTICE,
-    file.node.body,
-    renderStructuralContent(file, filesByPath),
-  ].filter((section) => section !== "");
+  const structural = renderStructuralContent(file, filesByPath);
+  const isNavigation = file.childPaths.length > 0;
 
-  return `${sections.join("\n\n")}\n`;
+  // The notice frames sliced source content. It must not sit above das's own
+  // table of contents, which is generated structure and the one part of the
+  // file an agent is meant to act on, and it is omitted entirely when the
+  // file carries no source content for it to frame.
+  const slicedSections = isNavigation
+    ? [file.node.body]
+    : [file.node.body, structural];
+  const notice = slicedSections.some((section) => section !== "")
+    ? [UNTRUSTED_CONTENT_NOTICE]
+    : [];
+
+  const sections = isNavigation
+    ? [frontmatter, structural, ...notice, ...slicedSections]
+    : [frontmatter, ...notice, ...slicedSections];
+
+  return `${sections.filter((section) => section !== "").join("\n\n")}\n`;
 }
 
 function renderFramedFile(

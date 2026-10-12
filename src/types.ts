@@ -45,6 +45,20 @@ export interface DocNode {
   children: DocNode[];
   /** Estimated token count of this node's body plus all descendants. */
   subtreeTokens: number;
+  /**
+   * The source file this node was built from, set only on file nodes.
+   *
+   * Its presence marks a node as a resource: the emitter writes
+   * {@link DocFile.raw} verbatim instead of rendering the node.
+   */
+  source?: DocFile;
+  /**
+   * Final path segment of the source folder, set only on folder nodes.
+   *
+   * Emitted paths mirror the source tree, so the segment is the path and
+   * never a slug derived from a display name.
+   */
+  segment?: string;
 }
 
 /** A single file to be written by the emitter. */

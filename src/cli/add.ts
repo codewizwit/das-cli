@@ -77,9 +77,10 @@ export interface RunAddDeps {
     options: { includeLarge: boolean; pinnedSha?: string },
   ) => Promise<DocFile[]>;
   /**
-   * Build a normalized, collapsed, sized documentation tree from a fileset; production code wires
-   * `buildSizedTree` from `src/slicer/build-sized-tree.ts`, which composes `buildTree`,
-   * `collapseSingleChildChains`, and `sizeTree` in the order the collapse guarantee requires.
+   * Build a normalized, sized documentation tree from a fileset; production code wires
+   * `buildSizedTree` from `src/slicer/build-sized-tree.ts`, which composes `buildTree` and
+   * `sizeTree`. Single-child chains are deliberately not collapsed, because emitted paths
+   * mirror the source tree.
    */
   buildSizedTree: (files: DocFile[], rootName: string) => DocNode;
   /** Decide which nodes of a sized tree become which emitted files. */

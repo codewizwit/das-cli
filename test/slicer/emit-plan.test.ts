@@ -5,40 +5,72 @@ import { sizeTree } from "../../src/slicer/sizing.js";
 import { estimateTokens } from "../../src/markdown/tokens.js";
 import type { DocNode } from "../../src/types.js";
 
+function slugOf(name: string): string {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "section"
+  );
+}
+
+/**
+ * A node as the slicer now builds them: a childless node is a source file and
+ * a node with children is a source folder. Emitted paths mirror the source,
+ * so the segment and file name come from here rather than from a slug the
+ * planner invents.
+ */
 function unsizedNode(
   name: string,
   body: string,
   children: DocNode[] = [],
 ): DocNode {
-  return { name, body, children, subtreeTokens: 0 };
+  const segment = slugOf(name);
+
+  if (children.length === 0) {
+    return {
+      name,
+      body,
+      children,
+      subtreeTokens: 0,
+      source: {
+        relativePath: `${segment}.md`,
+        raw: body,
+        content: body,
+        frontmatter: {},
+      },
+    };
+  }
+
+  return { name, body, children, subtreeTokens: 0, segment };
+}
+
+/** A source file at an explicit path, for cases where the name differs. */
+function fileNode(relativePath: string, name: string, body: string): DocNode {
+  return {
+    name,
+    body,
+    children: [],
+    subtreeTokens: 0,
+    source: { relativePath, raw: body, content: body, frontmatter: {} },
+  };
 }
 
 function sized(node: DocNode): DocNode {
   return sizeTree(node);
 }
 
-function directoryOfFile(file: PlannedFile): string {
-  if (file.relativePath === "SKILL.md") {
-    return "resources";
-  }
-  return file.relativePath.endsWith("/index.md")
-    ? file.relativePath.slice(0, -"/index.md".length)
-    : file.relativePath;
-}
-
 function estimatedFileTokens(files: PlannedFile[], file: PlannedFile): number {
   if (file.role === "leaf") {
-    return file.node.subtreeTokens;
+    return file.node.source === undefined
+      ? file.node.subtreeTokens
+      : estimateTokens(file.node.source.raw);
   }
 
-  const dir = directoryOfFile(file);
   const lines = file.childPaths.map((path) => {
     const target = files.find((candidate) => candidate.relativePath === path);
     const name = target?.node.name ?? path;
-    const linkPath = path.startsWith(`${dir}/`)
-      ? path.slice(dir.length + 1)
-      : path;
-    return `- [${name}](${linkPath})`;
+    return `- [${name}](${path})`;
   });
   const tocTokens = estimateTokens(lines.join("\n"));
   const bodyTokens = file.node.body === "" ? 0 : estimateTokens(file.node.body);
@@ -74,7 +106,7 @@ function assertReferentialIntegrity(plan: EmissionPlan): void {
 }
 
 describe("planEmission", () => {
-  it("emits a small doc as exactly one SKILL.md file with role skill", () => {
+  it("emits SKILL.md plus one resource per source file even when the whole tree fits", () => {
     const root = sized(
       unsizedNode("root", "Intro body.", [
         unsizedNode("Getting Started", "Getting started body."),
@@ -84,39 +116,36 @@ describe("planEmission", () => {
 
     const plan = planEmission(root, { tokenBudget: 5000 });
 
-    expect(plan.files).toHaveLength(1);
-    expect(plan.files[0]).toEqual({
-      relativePath: "SKILL.md",
-      node: root,
-      role: "skill",
-      childPaths: [],
-    });
+    expect(plan.files.map((file) => file.relativePath)).toEqual([
+      "SKILL.md",
+      "resources/getting-started.md",
+      "resources/reference.md",
+    ]);
+    expect(plan.files[0]?.role).toBe("skill");
+    expect(plan.files[0]?.childPaths).toEqual([
+      "resources/getting-started.md",
+      "resources/reference.md",
+    ]);
     expect(plan.oversized).toEqual([]);
     expect(plan.oversizedIndexes).toEqual([]);
   });
 
-  it("inlines a subtree that fits the budget as one leaf, even though it has child headings", () => {
-    const smallSubtree = unsizedNode("Guide", "Guide intro.", [
-      unsizedNode("Step One", "Step one body."),
-      unsizedNode("Step Two", "Step two body."),
-    ]);
-    const filler = unsizedNode("Filler", "x ".repeat(2000));
-    const root = sized(unsizedNode("root", "", [smallSubtree, filler]));
-
-    const plan = planEmission(root, { tokenBudget: 100 });
-
-    const guideFile = plan.files.find((file) => file.node.name === "Guide");
-    expect(guideFile).toBeDefined();
-    expect(guideFile?.role).toBe("leaf");
-    expect(guideFile?.relativePath).toBe("resources/guide.md");
-    expect(guideFile?.childPaths).toEqual([]);
-
-    const stepFiles = plan.files.filter(
-      (file) => file.node.name === "Step One" || file.node.name === "Step Two",
+  it("never splits a document into per-heading files, whatever the budget", () => {
+    const guide = fileNode(
+      "guide.md",
+      "Guide",
+      `# Guide\n\n## Step One\n\n${"word ".repeat(400)}`,
     );
-    expect(stepFiles).toHaveLength(0);
+    const root = sized(unsizedNode("root", "", [guide]));
 
-    assertAllFilesWithinBudgetOrFlagged(plan, 100);
+    const plan = planEmission(root, { tokenBudget: 50 });
+
+    const guideFiles = plan.files.filter((file) => file.node.name === "Guide");
+    expect(guideFiles).toHaveLength(1);
+    expect(guideFiles[0]?.role).toBe("leaf");
+    expect(guideFiles[0]?.relativePath).toBe("resources/guide.md");
+    expect(guideFiles[0]?.childPaths).toEqual([]);
+    expect(plan.oversized).toContain("resources/guide.md");
   });
 
   it("groups ~200 tiny sibling sections so every emitted index/group ToC stays within budget", () => {
@@ -210,60 +239,45 @@ describe("planEmission", () => {
     assertReferentialIntegrity(plan);
   });
 
-  it("assigns deterministic distinct slugs to same-name siblings, stable across runs and unrelated insertions", () => {
+  it("gives two files sharing a display name distinct paths, taken from their file names", () => {
     const filler = unsizedNode("Filler", "x ".repeat(3000));
-    const buildRoot = (withUnrelatedFirst: boolean): DocNode => {
-      const children = withUnrelatedFirst
-        ? [
-            unsizedNode("Unrelated", "Unrelated body."),
-            unsizedNode("Setup", "First setup body."),
-            unsizedNode("Setup", "Second setup body."),
-          ]
-        : [
-            unsizedNode("Setup", "First setup body."),
-            unsizedNode("Setup", "Second setup body."),
-          ];
-      return sized(unsizedNode("root", "", [filler, ...children]));
-    };
+    const buildRoot = (): DocNode =>
+      sized(
+        unsizedNode("root", "", [
+          filler,
+          fileNode("setup.md", "Setup", "First setup body."),
+          fileNode("setup-advanced.md", "Setup", "Second setup body."),
+        ]),
+      );
 
-    const withoutUnrelated = planEmission(buildRoot(false), {
-      tokenBudget: 50,
-    });
-    const withoutUnrelatedAgain = planEmission(buildRoot(false), {
-      tokenBudget: 50,
-    });
-    const withUnrelated = planEmission(buildRoot(true), { tokenBudget: 50 });
+    const first = planEmission(buildRoot(), { tokenBudget: 50 });
+    const again = planEmission(buildRoot(), { tokenBudget: 50 });
 
-    expect(withoutUnrelated.files.map((file) => file.relativePath)).toEqual(
-      withoutUnrelatedAgain.files.map((file) => file.relativePath),
+    expect(first.files.map((file) => file.relativePath)).toEqual(
+      again.files.map((file) => file.relativePath),
     );
 
-    const setupPaths = (files: PlannedFile[]): string[] =>
-      files
-        .filter((file) => file.node.name === "Setup")
-        .map((file) => file.relativePath)
-        .sort();
-
-    expect(setupPaths(withoutUnrelated.files)).toEqual([
-      "resources/setup-2.md",
-      "resources/setup.md",
-    ]);
-    expect(setupPaths(withUnrelated.files)).toEqual([
-      "resources/setup-2.md",
+    const setupPaths = first.files
+      .filter((file) => file.node.name === "Setup")
+      .map((file) => file.relativePath)
+      .sort();
+    expect(setupPaths).toEqual([
+      "resources/setup-advanced.md",
       "resources/setup.md",
     ]);
   });
 
   it("keeps every planned relativePath globally unique across a complex fixture", () => {
     const many = Array.from({ length: 60 }, (_, index) =>
-      unsizedNode(
+      fileNode(
+        `doc-${String(index)}.md`,
         index % 2 === 0 ? "Duplicate" : `Unique ${String(index)}`,
         `Body ${String(index)}.`,
       ),
     );
     const nested = unsizedNode("Nested Group", "word ".repeat(300), [
-      unsizedNode("Duplicate", "Nested duplicate body."),
-      unsizedNode("Duplicate", "Another nested duplicate body."),
+      fileNode("one.md", "Duplicate", "Nested duplicate body."),
+      fileNode("two.md", "Duplicate", "Another nested duplicate body."),
     ]);
     const root = sized(
       unsizedNode("root", "word ".repeat(300), [...many, nested]),
@@ -275,31 +289,6 @@ describe("planEmission", () => {
     expect(new Set(relativePaths).size).toBe(relativePaths.length);
 
     assertReferentialIntegrity(plan);
-  });
-
-  it("moves an oversized index's own body into a separate Overview leaf, placed first", () => {
-    const bigBody = "word ".repeat(200);
-    const root = sized(
-      unsizedNode("root", bigBody, [
-        unsizedNode("Child One", "Child one body."),
-        unsizedNode("Child Two", "Child two body."),
-      ]),
-    );
-
-    const plan = planEmission(root, { tokenBudget: 50 });
-
-    const skillFile = plan.files.find(
-      (file) => file.relativePath === "SKILL.md",
-    );
-    expect(skillFile?.role).toBe("skill");
-    expect(skillFile?.node.body).toBe("");
-
-    const overviewFile = plan.files.find(
-      (file) => file.node.name === "Overview",
-    );
-    expect(overviewFile).toBeDefined();
-    expect(overviewFile?.node.body).toBe(bigBody);
-    expect(overviewFile?.relativePath).toBe("resources/overview.md");
   });
 
   describe("irreducible ToC entries (Rule 3 base case)", () => {
@@ -361,7 +350,7 @@ describe("planEmission", () => {
     });
   });
 
-  describe("Overview trigger uses the post-grouping table of contents", () => {
+  describe("an index keeps its own body", () => {
     it("keeps the body in SKILL.md when the grouped ToC easily fits alongside it", () => {
       const budget = 400;
       const body = "word ".repeat(60);
@@ -386,29 +375,6 @@ describe("planEmission", () => {
       expect(skillFile?.node.body).toBe(body);
     });
 
-    it("still relocates the body to Overview when body plus the real ToC exceeds budget", () => {
-      const budget = 40;
-      const body = "word ".repeat(40);
-      const root = sized(
-        unsizedNode("root", body, [
-          unsizedNode("Child One", "Child one body."),
-          unsizedNode("Child Two", "Child two body."),
-        ]),
-      );
-
-      const plan = planEmission(root, { tokenBudget: budget });
-
-      const overviewFile = plan.files.find(
-        (file) => file.node.name === "Overview",
-      );
-      expect(overviewFile).toBeDefined();
-      expect(overviewFile?.node.body).toBe(body);
-
-      const skillFile = plan.files.find(
-        (file) => file.relativePath === "SKILL.md",
-      );
-      expect(skillFile?.node.body).toBe("");
-    });
   });
 
   describe("childPaths", () => {
@@ -462,8 +428,9 @@ describe("planEmission", () => {
 
       const plan = planEmission(root, { tokenBudget: 5000 });
 
-      expect(plan.files[0]?.role).toBe("skill");
-      expect(plan.files[0]?.childPaths).toEqual([]);
+      const leaf = plan.files.find((file) => file.role === "leaf");
+      expect(leaf?.relativePath).toBe("resources/only-child.md");
+      expect(leaf?.childPaths).toEqual([]);
     });
 
     it("keeps every childPath referentially valid across a complex grouped and nested fixture", () => {

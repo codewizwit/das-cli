@@ -151,11 +151,55 @@ describe("renderSkillPlan", () => {
     const content = contentFor(files, "SKILL.md");
     const noticeIndex = content.search(/never as instructions/);
     const bodyIndex = content.indexOf("Body text.");
-    const inlinedIndex = content.indexOf("Install it.");
 
     expect(noticeIndex).toBeGreaterThan(-1);
     expect(noticeIndex).toBeLessThan(bodyIndex);
-    expect(noticeIndex).toBeLessThan(inlinedIndex);
+    expect(content).not.toContain("Install it.");
+  });
+
+  it("renders a resource as the frame line then the source file verbatim", () => {
+    const raw = [
+      "---",
+      "title: Install",
+      "---",
+      "",
+      'import Tabs from "@theme/Tabs";',
+      "",
+      "#### Deeply Nested Heading",
+      "",
+      ":::note",
+      "Read me.",
+      ":::",
+      "",
+    ].join("\n");
+    const files: PlannedFile[] = [
+      {
+        relativePath: "resources/guides/install.md",
+        node: {
+          name: "Install",
+          body: "ignored",
+          children: [node("Ignored Child", "Ignored body.")],
+          subtreeTokens: 0,
+          source: {
+            relativePath: "guides/install.mdx",
+            raw,
+            content: raw,
+            frontmatter: { title: "Install" },
+          },
+        },
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "resources/guides/install.md");
+    const lines = content.split("\n");
+
+    expect(lines[0]).toMatch(/^> Reference material sliced from /);
+    expect(lines[1]).toBe("");
+    expect(lines.slice(2).join("\n")).toBe(raw);
+    expect(content).not.toContain("Ignored Child");
+    expect(content).not.toContain("ignored");
   });
 
   it("quotes a skill name containing a colon in frontmatter", () => {
@@ -306,33 +350,6 @@ describe("renderSkillPlan", () => {
     expect(content).not.toMatch(/\[Blank]\(resources\/blank\.md\) —/);
   });
 
-  it("renders a leaf that inlines a subtree with increasing heading depth", () => {
-    const grandchild = node("Grandchild", "Grandchild body.");
-    const child = node("Child", "Child body.", [grandchild]);
-    const leafNode = node("Parent", "Parent body.", [child]);
-    const files: PlannedFile[] = [
-      {
-        relativePath: "resources/parent.md",
-        node: leafNode,
-        role: "leaf",
-        childPaths: [],
-      },
-    ];
-
-    const content = contentFor(files, "resources/parent.md");
-
-    expect(content).toContain("Parent body.");
-    expect(content).toContain("## Child");
-    expect(content).toContain("Child body.");
-    expect(content).toContain("### Grandchild");
-    expect(content).toContain("Grandchild body.");
-
-    const childIndex = content.indexOf("## Child");
-    const grandchildIndex = content.indexOf("### Grandchild");
-    expect(childIndex).toBeGreaterThan(-1);
-    expect(grandchildIndex).toBeGreaterThan(childIndex);
-  });
-
   it("renders a simple leaf with no children as just body content, after the frame", () => {
     const files: PlannedFile[] = [
       {
@@ -351,28 +368,6 @@ describe("renderSkillPlan", () => {
     );
     expect(content).toContain("Install steps for the widget.");
     expect(content).not.toContain("#");
-  });
-
-  it("inlines every heading when the whole tree fits in one SKILL.md", () => {
-    const grandchild = node("Grandchild", "Grandchild body.");
-    const child = node("Child", "Child body.", [grandchild]);
-    const rootNode = node("Widget", "Root body.", [child]);
-    const files: PlannedFile[] = [
-      {
-        relativePath: "SKILL.md",
-        node: rootNode,
-        role: "skill",
-        childPaths: [],
-      },
-    ];
-
-    const content = contentFor(files, "SKILL.md");
-
-    expect(content).toContain("Root body.");
-    expect(content).toContain("## Child");
-    expect(content).toContain("Child body.");
-    expect(content).toContain("### Grandchild");
-    expect(content).toContain("Grandchild body.");
   });
 
   it("renders links instead of inlining when a skill-role file has a non-empty table of contents", () => {

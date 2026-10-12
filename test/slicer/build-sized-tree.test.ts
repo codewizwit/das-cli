@@ -3,7 +3,7 @@ import { buildSizedTree } from "../../src/slicer/build-sized-tree.js";
 import type { DocFile } from "../../src/types.js";
 
 describe("buildSizedTree", () => {
-  it("collapses a single-child chain produced by a title matching its first H1, and sizes the result", () => {
+  it("keeps a source folder as a node of its own, because emitted paths mirror the source", () => {
     const files: DocFile[] = [
       {
         relativePath: "guides/install.md",
@@ -17,13 +17,16 @@ describe("buildSizedTree", () => {
 
     expect(tree.children).toHaveLength(1);
     const guidesFolder = tree.children[0]!;
-    expect(guidesFolder.name).toBe("Installation");
-    expect(guidesFolder.body).toBe("Follow these steps to install the tool.");
-    expect(guidesFolder.children).toEqual([]);
+    expect(guidesFolder.segment).toBe("guides");
+    expect(guidesFolder.children).toHaveLength(1);
     expect(guidesFolder.subtreeTokens).toBeGreaterThan(0);
+
+    const installFile = guidesFolder.children[0]!;
+    expect(installFile.name).toBe("Installation");
+    expect(installFile.source?.relativePath).toBe("guides/install.md");
   });
 
-  it("sizes the tree after collapsing, not before, so subtreeTokens reflects the collapsed shape", () => {
+  it("sizes the tree it builds, so a file node's tokens cover its headings", () => {
     const files: DocFile[] = [
       {
         relativePath: "intro.md",
@@ -33,14 +36,12 @@ describe("buildSizedTree", () => {
       },
     ];
 
-    const uncollapsedFileNodeBodyTokens = 0;
     const tree = buildSizedTree(files, "root");
     const fileNode = tree.children[0]!;
 
-    expect(fileNode.subtreeTokens).toBeGreaterThan(
-      uncollapsedFileNodeBodyTokens,
-    );
-    expect(fileNode.body).toContain("Welcome to the docs.");
+    expect(fileNode.source?.relativePath).toBe("intro.md");
+    expect(fileNode.subtreeTokens).toBeGreaterThan(0);
+    expect(fileNode.children[0]?.body).toContain("Welcome to the docs.");
   });
 
   it("leaves a genuinely nested, non-redundant tree intact", () => {
@@ -59,9 +60,9 @@ describe("buildSizedTree", () => {
     const fileNode = tree.children[0]!;
 
     expect(fileNode.name).toBe("Guide");
-    expect(fileNode.children.map((child) => child.name)).toEqual([
-      "Step One",
-      "Step Two",
-    ]);
+    expect(fileNode.children.map((child) => child.name)).toEqual(["Guide"]);
+    expect(
+      fileNode.children[0]?.children.map((child) => child.name),
+    ).toEqual(["Step One", "Step Two"]);
   });
 });

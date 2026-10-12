@@ -124,6 +124,7 @@ function buildFileNode(file: DocFile): DocNode {
     body: preamble,
     children: nestHeadings(headings),
     subtreeTokens: 0,
+    source: file,
   };
 }
 
@@ -166,6 +167,7 @@ export function buildTree(files: DocFile[], rootName: string): DocNode {
           body: "",
           children: [],
           subtreeTokens: 0,
+          segment,
         };
         parentNode.children.push(folderNode);
         folderNodesByPath.set(folderPath, folderNode);

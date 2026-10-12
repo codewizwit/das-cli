@@ -14,6 +14,7 @@ import type { EmissionPlan } from "../slicer/emit-plan.js";
 import type { HashParams } from "../state/hash.js";
 import type { Manifest, ManifestEntry } from "../state/manifest.js";
 import { sanitizeSlug } from "../markdown/slug.js";
+import { isLandingPageName } from "../slicer/tree.js";
 import type { DocFile, DocNode, EmitFile, SourceRef } from "../types.js";
 
 /** The default per-file token budget applied when `--token-budget` is not given. */
@@ -247,16 +248,42 @@ function deriveSourceLabel(ref: SourceRef): string {
   return ref.subpath ? `${ref.url}/${ref.subpath}` : ref.url;
 }
 
+/**
+ * Build the skill description, which is the one string loaded into every
+ * session whether or not the skill is used.
+ *
+ * It states when to reach for the skill and then what the corpus is. A
+ * content inventory fails at this job: measured on a real corpus, a
+ * "Covers: ..." list did not fire on a question phrased "in this
+ * documentation corpus", and the skill was never invoked, which makes every
+ * index below it unreachable.
+ *
+ * The subjects are the corpus's own top-level titles, and the second sentence
+ * is the root landing page's authored description when it declares one, so
+ * nothing here is machine-written prose. The source path is left out: this
+ * field is matched against a user's question, and a filesystem path has never
+ * helped that. das.json records the source.
+ *
+ * @param title - The corpus title, used when it has no top-level sections
+ * @param topLevelSectionNames - Titles of the corpus's top-level entries
+ * @param rootDescription - The root landing page's authored description, if any
+ * @returns A description bounded by {@link DEFAULT_DESCRIPTION_MAX_LENGTH}
+ */
 function buildDefaultDescription(
   title: string,
-  sourceLabel: string,
   topLevelSectionNames: string[],
+  rootDescription?: string,
 ): string {
-  const coversClause =
+  const subjects =
     topLevelSectionNames.length > 0
-      ? ` Covers: ${topLevelSectionNames.join(", ")}.`
-      : "";
-  const full = `Reference documentation for ${title}, sliced from ${sourceLabel}.${coversClause}`;
+      ? topLevelSectionNames.join(", ")
+      : title;
+  const trigger = `Use for questions about ${subjects}.`;
+  const context = rootDescription?.trim();
+  const full =
+    context === undefined || context === ""
+      ? trigger
+      : `${trigger} ${context}`;
 
   return full.length > DEFAULT_DESCRIPTION_MAX_LENGTH
     ? full.slice(0, DEFAULT_DESCRIPTION_MAX_LENGTH)
@@ -433,11 +460,22 @@ export async function runAdd(
   const plan = deps.planEmission(sizedRoot, { tokenBudget });
 
   const defaultName = sanitizeSlug(title);
-  const topLevelSectionNames = sizedRoot.children.map((child) => child.name);
+  // The root's own landing page is a child rather than attached to the root,
+  // so its authored description is found here.
+  const rootLandingPage = sizedRoot.children.find((child) => {
+    const relativePath = child.source?.relativePath;
+    return (
+      relativePath !== undefined &&
+      isLandingPageName(relativePath.split("/").pop() ?? "")
+    );
+  });
+  const topLevelSectionNames = sizedRoot.children
+    .filter((child) => child !== rootLandingPage)
+    .map((child) => child.name);
   const defaultDescription = buildDefaultDescription(
     title,
-    sourceLabel,
     topLevelSectionNames,
+    rootLandingPage?.source?.frontmatter.description,
   );
 
   const nameForPreview = args.name ?? defaultName;

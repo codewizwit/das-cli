@@ -64,6 +64,35 @@ function readSidebarPosition(
  * const { frontmatter, body } = parseFrontmatter("---\ntitle: Intro\n---\nBody");
  * ```
  */
+/**
+ * Read a field that is authored either as a YAML list or a single string.
+ *
+ * Docusaurus accepts both for `keywords` and `tags`, so both are kept.
+ * Entries that are not strings are dropped rather than coerced.
+ */
+function readStringArrayField(
+  data: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  const value = data[key];
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? undefined : [trimmed];
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entries = value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+
+  return entries.length === 0 ? undefined : entries;
+}
+
 export function parseFrontmatter(raw: string): ParsedFrontmatter {
   const parsed = matter(raw);
   const data = parsed.data as Record<string, unknown>;
@@ -71,11 +100,17 @@ export function parseFrontmatter(raw: string): ParsedFrontmatter {
   const title = readStringField(data, "title");
   const draft = readBooleanField(data, "draft");
   const sidebarPosition = readSidebarPosition(data);
+  const description = readStringField(data, "description");
+  const keywords = readStringArrayField(data, "keywords");
+  const tags = readStringArrayField(data, "tags");
 
   const frontmatter: Frontmatter = {
     ...(title !== undefined ? { title } : {}),
     ...(sidebarPosition !== undefined ? { sidebarPosition } : {}),
     ...(draft !== undefined ? { draft } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(keywords !== undefined ? { keywords } : {}),
+    ...(tags !== undefined ? { tags } : {}),
   };
 
   return { frontmatter, body: parsed.content };

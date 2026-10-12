@@ -202,6 +202,170 @@ describe("renderSkillPlan", () => {
     expect(content).not.toContain("ignored");
   });
 
+  it("falls through to a document's own headings when its first paragraph is shared with a sibling", () => {
+    const boilerplate =
+      "This page is part of the Acme handbook. It documents how the team works and why the system is built this way.";
+    const resource = (
+      relativePath: string,
+      name: string,
+      body: string,
+    ): PlannedFile => ({
+      relativePath,
+      node: {
+        name,
+        body: "",
+        children: [],
+        subtreeTokens: 0,
+        source: {
+          relativePath: relativePath.replace("resources/", ""),
+          raw: body,
+          content: body,
+          frontmatter: {},
+        },
+      },
+      role: "leaf",
+      childPaths: [],
+    });
+
+    const withHeadings = (
+      file: PlannedFile,
+      headingNames: string[],
+    ): PlannedFile => ({
+      ...file,
+      node: {
+        ...file.node,
+        children: headingNames.map((heading) => node(heading, "body")),
+      },
+    });
+
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("root", ""),
+        role: "skill",
+        childPaths: [
+          "resources/data-model.md",
+          "resources/events.md",
+          "resources/unique.md",
+        ],
+      },
+      withHeadings(
+        resource(
+          "resources/data-model.md",
+          "Data Model",
+          `# Data Model\n\n${boilerplate}`,
+        ),
+        ["Entities", "Migrations"],
+      ),
+      withHeadings(
+        resource(
+          "resources/events.md",
+          "Event Bus",
+          `# Event Bus\n\n${boilerplate}`,
+        ),
+        ["Topics", "Replay"],
+      ),
+      resource(
+        "resources/unique.md",
+        "Multi-Region",
+        "# Multi-Region\n\nHow Acme fails over between regions.",
+      ),
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+    const lineFor = (name: string): string =>
+      content.split("\n").find((line) => line.startsWith(`- [${name}]`)) ?? "";
+
+    // The shared boilerplate cannot route, so each entry falls through to
+    // its own headings, which differ.
+    expect(lineFor("Data Model")).toContain("Entities, Migrations");
+    expect(lineFor("Event Bus")).toContain("Topics, Replay");
+    expect(lineFor("Data Model")).not.toContain("Acme handbook");
+    expect(lineFor("Event Bus")).not.toContain("Acme handbook");
+
+    // A genuinely distinct opening paragraph is still preferred.
+    expect(lineFor("Multi-Region")).toContain(
+      "How Acme fails over between regions.",
+    );
+  });
+
+  it("lists the sections under an H1 that repeats the document's own title", () => {
+    const docNode = {
+      name: "Data Model",
+      body: "",
+      children: [
+        node("Data Model", "", [
+          node("Overview", "o"),
+          node("Design", "d"),
+          node("Trade-offs", "t"),
+        ]),
+      ],
+      subtreeTokens: 0,
+      source: {
+        relativePath: "data-model.md",
+        raw: "# Data Model",
+        content: "# Data Model",
+        frontmatter: {},
+      },
+    };
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("root", ""),
+        role: "skill",
+        childPaths: ["resources/data-model.md"],
+      },
+      {
+        relativePath: "resources/data-model.md",
+        node: docNode,
+        role: "leaf",
+        childPaths: [],
+      },
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toContain("— Overview, Design, Trade-offs");
+    expect(content).not.toContain("— Data Model");
+  });
+
+  it("gives no description when siblings share even their contents listing", () => {
+    const sibling = (slug: string, name: string): PlannedFile => ({
+      relativePath: `resources/${slug}.md`,
+      node: {
+        name,
+        body: "",
+        children: [node("Overview", "o"), node("Design", "d")],
+        subtreeTokens: 0,
+        source: {
+          relativePath: `${slug}.md`,
+          raw: "body",
+          content: "body",
+          frontmatter: {},
+        },
+      },
+      role: "leaf",
+      childPaths: [],
+    });
+
+    const files: PlannedFile[] = [
+      {
+        relativePath: "SKILL.md",
+        node: node("root", ""),
+        role: "skill",
+        childPaths: ["resources/a.md", "resources/b.md"],
+      },
+      sibling("a", "Alpha"),
+      sibling("b", "Beta"),
+    ];
+
+    const content = contentFor(files, "SKILL.md");
+
+    expect(content).toContain("- [Alpha](resources/a.md)\n");
+    expect(content).toContain("- [Beta](resources/b.md)");
+    expect(content).not.toContain("Overview, Design");
+  });
+
   it("quotes a skill name containing a colon in frontmatter", () => {
     const contextWithColon: RenderContext = {
       skillName: "widget: the docs",

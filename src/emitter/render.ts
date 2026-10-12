@@ -1,5 +1,5 @@
 import { dirname, relative } from "node:path";
-import { firstSummary } from "../markdown/summary.js";
+import { resolveEntryDescriptions } from "../markdown/describe.js";
 import type { EmissionPlan, PlannedFile } from "../slicer/emit-plan.js";
 import type { DocFile, EmitFile } from "../types.js";
 
@@ -65,18 +65,18 @@ function renderTableOfContents(
   file: PlannedFile,
   filesByPath: Map<string, PlannedFile>,
 ): string {
-  const lines = file.childPaths.map((childPath) => {
-    const child = lookupPlannedFile(filesByPath, childPath);
-    const link = relativeLink(file.relativePath, childPath);
-    // A file node's own body is only its preamble, and most documents open
-    // with a heading, so summarise the whole document. firstSummary skips
-    // headings, which lands on the first prose paragraph: the same thing
-    // Docusaurus uses when a page declares no description.
-    const summary = firstSummary(
-      child.node.source?.content ?? child.node.body,
-    );
-    const summarySuffix = summary === "" ? "" : ` — ${summary}`;
-    return `- [${escapeLinkText(child.node.name)}](${escapeLinkTarget(link)})${summarySuffix}`;
+  const children = file.childPaths.map((childPath) =>
+    lookupPlannedFile(filesByPath, childPath),
+  );
+  const descriptions = resolveEntryDescriptions(
+    children.map((child) => child.node),
+  );
+
+  const lines = children.map((child, index) => {
+    const link = relativeLink(file.relativePath, child.relativePath);
+    const description = descriptions[index] ?? "";
+    const suffix = description === "" ? "" : ` — ${description}`;
+    return `- [${escapeLinkText(child.node.name)}](${escapeLinkTarget(link)})${suffix}`;
   });
 
   return lines.join("\n");

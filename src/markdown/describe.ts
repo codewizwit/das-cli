@@ -17,9 +17,23 @@ function describingSource(node: DocNode): DocFile | undefined {
   return node.source ?? node.landing;
 }
 
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === "" ? undefined : trimmed;
+}
+
+/**
+ * The description an author wrote for this node.
+ *
+ * A folder's category file wins over its landing page, because an explicit
+ * `_category_.json` entry is a deliberate override of what the index doc
+ * says, which is how Docusaurus reads it too.
+ */
 function authoredDescription(node: DocNode): string | undefined {
-  const declared = describingSource(node)?.frontmatter.description?.trim();
-  return declared === undefined || declared === "" ? undefined : declared;
+  return (
+    nonEmpty(node.category?.description) ??
+    nonEmpty(describingSource(node)?.frontmatter.description)
+  );
 }
 
 /**
@@ -102,7 +116,8 @@ function countOccurrences(values: string[]): Map<string, number> {
  *
  * Tiers, each used only when the one above it is absent:
  *
- * 1. The authored `description` in the source's frontmatter.
+ * 1. The authored description: a folder's `_category_.json`, then the
+ *    `description` in the source's or landing page's frontmatter.
  * 2. The first prose paragraph, **when it is unique among these siblings**. A
  *    paragraph two siblings share cannot help an agent choose between them,
  *    which is what a corpus whose pages open with the same boilerplate

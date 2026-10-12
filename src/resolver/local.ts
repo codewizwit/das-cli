@@ -2,6 +2,10 @@ import type { Stats } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseFrontmatter } from "../markdown/frontmatter.js";
+import {
+  isCategoryFileName,
+  parseCategoryMeta,
+} from "../markdown/category.js";
 import { stripMdx } from "../markdown/mdx.js";
 import type { DocFile } from "../types.js";
 import { compareDocOrder, type OrderKey } from "./ordering.js";
@@ -65,6 +69,61 @@ function toRelativePosixPath(fromPath: string, toPath: string): string {
   return path.relative(fromPath, toPath).split(path.sep).join("/");
 }
 
+/**
+ * Read a folder's category metadata file into the fileset.
+ *
+ * Returned as a {@link DocFile} so it flows with the source files the slicer
+ * already receives and so the source hash covers it. `content` is the raw
+ * text rather than a parsed form, because parsing belongs to the slicer.
+ */
+async function readCategoryFile(
+  absolutePath: string,
+  relativePath: string,
+  entryStat: Stats,
+  options: ResolveLocalOptions,
+): Promise<DocFile | null> {
+  if (entryStat.size > maxFileSizeBytes && !options.includeLarge) {
+    return null;
+  }
+
+  const raw = await readFile(absolutePath, "utf-8");
+  return { relativePath, raw, content: raw, frontmatter: {} };
+}
+
+/**
+ * The authored sidebar position a folder declares for itself, if any.
+ *
+ * Read during the walk because a directory's order key is built there, before
+ * the slicer sees anything.
+ */
+async function readCategoryPosition(
+  directoryPath: string,
+): Promise<number | undefined> {
+  let entryNames: string[];
+  try {
+    entryNames = await readdir(directoryPath);
+  } catch {
+    return undefined;
+  }
+
+  const categoryFileName = entryNames.find((entryName) =>
+    isCategoryFileName(entryName),
+  );
+  if (categoryFileName === undefined) {
+    return undefined;
+  }
+
+  try {
+    const raw = await readFile(
+      path.join(directoryPath, categoryFileName),
+      "utf-8",
+    );
+    return parseCategoryMeta(raw, categoryFileName).position;
+  } catch {
+    return undefined;
+  }
+}
+
 async function processMarkdownFile(
   absolutePath: string,
   relativePath: string,
@@ -123,16 +182,47 @@ async function walkDirectory(
     const relativePath = toRelativePosixPath(docsRootPath, entryPath);
 
     if (entryLstat.isDirectory()) {
+      // Docusaurus orders categories by `position` in the folder's category
+      // file. Without this a folder sorts by name, so das's index would
+      // contradict the sidebar the authors see.
+      const position = await readCategoryPosition(entryPath);
       sortableEntries.push({
         kind: "directory",
         absolutePath: entryPath,
-        orderKey: { fileName: entryName, relativePath },
+        orderKey: {
+          ...(position !== undefined ? { sidebarPosition: position } : {}),
+          fileName: entryName,
+          relativePath,
+        },
       });
       continue;
     }
 
+    if (!entryLstat.isFile()) {
+      continue;
+    }
+
+    // A folder's category metadata travels with the fileset: the slicer reads
+    // it for the folder's label and description, and the source hash covers
+    // it so editing one triggers a re-slice. It is never emitted.
+    if (isCategoryFileName(entryName)) {
+      const categoryFile = await readCategoryFile(
+        entryPath,
+        relativePath,
+        entryLstat,
+        options,
+      );
+      if (categoryFile !== null) {
+        sortableEntries.push({
+          kind: "file",
+          docFile: categoryFile,
+          orderKey: { fileName: entryName, relativePath },
+        });
+      }
+      continue;
+    }
+
     if (
-      !entryLstat.isFile() ||
       !markdownExtensionPattern.test(entryName) ||
       changelogFileNamePattern.test(entryName) ||
       licenseFileNamePattern.test(entryName)

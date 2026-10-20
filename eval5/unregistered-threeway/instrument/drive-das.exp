@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+# Drive `das add` through a pty so the corpus stays unmodified: accept the
+# default description, then confirm the injection-scan findings.
+# Each prompt is answered once; inquirer redraws its line repeatedly.
+set timeout 600
+log_user 1
+set sent_desc 0
+set sent_scan 0
+
+spawn -noecho {*}$argv
+
+expect {
+  -re {Proceed anyway\?} {
+    if {$sent_scan == 0} { set sent_scan 1; send "y\r" }
+    exp_continue
+  }
+  -re {\? Description} {
+    if {$sent_desc == 0} { set sent_desc 1; send "\r" }
+    exp_continue
+  }
+  eof {}
+}
+
+catch wait result
+exit [lindex $result 3]

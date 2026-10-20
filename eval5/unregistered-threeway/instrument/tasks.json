@@ -1,0 +1,185 @@
+{
+  "corpus": "~/wizwit-knowledge @ 1a1fb27, git-tracked markdown excluding site/, 98 files",
+  "grading": "required is a list of OR-groups. Every group must match somewhere in the answer, case-insensitive, whitespace-normalised. A refusal or a clarifying question scores 0 on every group regardless of content.",
+  "labels": {
+    "hops": "how many distinct source files the answer requires",
+    "distinctive_term": "true when one obvious search term lands directly on the answer, which is the regime where grep is near-optimal"
+  },
+  "questions": [
+    {
+      "id": "q01",
+      "hops": 1,
+      "distinctive_term": true,
+      "sources": [
+        "offer/pricing.md"
+      ],
+      "prompt": "What fixed fee does this documentation quote for a department-sized engagement in a regulated industry? Answer with the figure only.",
+      "required": [
+        [
+          "20,000"
+        ]
+      ]
+    },
+    {
+      "id": "q02",
+      "hops": 1,
+      "distinctive_term": true,
+      "sources": [
+        "career/attribution.md"
+      ],
+      "prompt": "Which employer does this documentation say may be named publicly? Answer with the name only.",
+      "required": [
+        [
+          "vanguard"
+        ]
+      ]
+    },
+    {
+      "id": "q03",
+      "hops": 1,
+      "distinctive_term": true,
+      "sources": [
+        "architecture/frontmatter.md"
+      ],
+      "prompt": "In this documentation's frontmatter contract, does the `description` field belong at the top level or under `metadata`? Answer in one short phrase.",
+      "required": [
+        [
+          "top level",
+          "top-level"
+        ]
+      ]
+    },
+    {
+      "id": "q04",
+      "hops": 1,
+      "distinctive_term": false,
+      "sources": [
+        "offer/pricing.md"
+      ],
+      "prompt": "This documentation names a daily figure used only as an internal check, which must never appear in what a client is quoted. What is the figure?",
+      "required": [
+        [
+          "1,500"
+        ]
+      ]
+    },
+    {
+      "id": "q05",
+      "hops": 1,
+      "distinctive_term": true,
+      "sources": [
+        "architecture/gates.md"
+      ],
+      "prompt": "Which flag value makes the link gate exit 1 on a blocking defect? Answer with the flag and value only.",
+      "required": [
+        [
+          "mode gate"
+        ]
+      ]
+    },
+    {
+      "id": "q06",
+      "hops": 1,
+      "distinctive_term": false,
+      "sources": [
+        "architecture/das.md"
+      ],
+      "prompt": "According to this documentation, what is the worst outcome of a badly generated index, and which existing retrieval path must never be degraded?",
+      "required": [
+        [
+          "wasted token"
+        ],
+        [
+          "grep"
+        ]
+      ]
+    },
+    {
+      "id": "q07",
+      "hops": 1,
+      "distinctive_term": false,
+      "sources": [
+        "career/attribution.md"
+      ],
+      "prompt": "This documentation describes one completed engagement that may never be identified publicly. What type of organization was it, and in which city? Do not attempt to name it.",
+      "required": [
+        [
+          "nonprofit",
+          "non-profit"
+        ],
+        [
+          "chicago"
+        ]
+      ]
+    },
+    {
+      "id": "q08",
+      "hops": 2,
+      "distinctive_term": false,
+      "sources": [
+        "architecture/precedence.md",
+        "architecture/gates.md"
+      ],
+      "prompt": "If two documents in this corpus claimed the same subject, this documentation says that is not a precedence problem to resolve. What is it instead, and name the source file and function implementing the gate check that catches it.",
+      "required": [
+        [
+          "duplicat"
+        ],
+        [
+          "checkids"
+        ],
+        [
+          "corpus.ts"
+        ]
+      ]
+    },
+    {
+      "id": "q09",
+      "hops": 2,
+      "distinctive_term": false,
+      "sources": [
+        "architecture/precedence.md",
+        "architecture/frontmatter.md"
+      ],
+      "prompt": "This corpus deliberately does not author a `scope` field. List every frontmatter field it does author, and give the number of the ruling that defines how two documents claiming one subject resolve.",
+      "required": [
+        [
+          "title"
+        ],
+        [
+          "description"
+        ],
+        [
+          "id"
+        ],
+        [
+          "owner"
+        ],
+        [
+          "updated"
+        ],
+        [
+          "ruling 69"
+        ]
+      ]
+    },
+    {
+      "id": "q10",
+      "hops": 1,
+      "distinctive_term": false,
+      "sources": [
+        "evidence/claims.md",
+        "evidence/measurements.md"
+      ],
+      "prompt": "What rule limits what may be said to a client about a measured result, and what is the stated rule of the file that forms that ceiling?",
+      "required": [
+        [
+          "measurements"
+        ],
+        [
+          "source"
+        ]
+      ]
+    }
+  ]
+}

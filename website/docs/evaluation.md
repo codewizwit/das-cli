@@ -20,9 +20,10 @@ nothing.
 **The baseline: search the raw files.** Read, grep and glob over the documentation in its
 original form, which is what an agent does today and the thing worth beating.
 
-**The variable: only the route to the documentation.** Two arms navigated a generated index
-instead of searching, one built by the current release and one by the previous one. Between
-those two the only difference is which version generated the skill.
+**The variable: the das index.** Two arms navigated a `das`-generated `_das-index.md` tree
+instead of searching the files, one skill produced by the previous release and one by the
+current release. Between those two arms the only difference is which version generated the
+skill, so anything that separates them is attributable to the generator.
 
 **What was measured:** accuracy, graded mechanically with a gate that scores a refusal or a
 clarifying question as zero; documentation tokens read into context, which is what

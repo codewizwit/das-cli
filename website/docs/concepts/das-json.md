@@ -9,8 +9,8 @@ Every generated skill carries a `das.json` alongside its `SKILL.md`, captured fr
 
 ```json
 {
-  "dasVersion": "0.1.1",
-  "slicerVersion": 1,
+  "dasVersion": "0.3.0",
+  "slicerVersion": 2,
   "name": "widget-sdk",
   "source": {
     "type": "path",

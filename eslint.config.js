@@ -8,6 +8,9 @@ export default tseslint.config(
       "coverage/**",
       "node_modules/**",
       "website/**",
+      // Evaluation harnesses are research artifacts, not shipped code, and their
+      // scripts sit outside the tsconfig project service.
+      "eval*/**",
       "*.config.js",
       "*.config.ts",
     ],

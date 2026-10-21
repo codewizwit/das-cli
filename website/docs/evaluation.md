@@ -15,7 +15,7 @@ and finally to the documents themselves. The agent reads the index first and ope
 page it needs.
 
 The question is whether that is actually better. Reading an index costs tokens too, so it
-could easily cost more than just searching and return the same answers.
+could easily end up costing more than searching while answering no better.
 
 ## How it was tested
 
@@ -55,14 +55,15 @@ documentation.
 | **das index, current release** | **50/50, 100%** | **82,806 tokens** | **679** | **$0.94** |
 | das index, previous release | 44/50, 88% | 260,109 tokens | 2,527 | $1.18 |
 
-**The current release got the same answers while reading 2.3x less documentation.** It read
-less on all ten questions. The widest gap was on the question whose answer has to be
+**Searching and the current release both answered almost everything correctly. The current
+release did it while reading 2.3x less documentation.** It read less on all ten questions. The widest gap was on the question whose answer has to be
 described rather than matched by a keyword, where it read about one sixth of what searching
 did. The narrowest was where one obvious keyword lands the answer, and even there it read
 less. The swing between questions was 4.9x smaller, and the bill was 27% lower.
 
-**The previous release lost on both counts.** It read 1.4x more than plain searching and got
-44 of 50 right, five fewer than searching and six fewer than the current release.
+**The previous release was worse than searching on both measures.** It read 1.4x more
+documentation, and it got 44 of 50 right against searching's 49, so six behind the current
+release.
 
 ## What it means
 

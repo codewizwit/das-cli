@@ -42,24 +42,30 @@ documentation.
 - **Documentation text pulled in**, counted in tokens. This is the real cost of retrieval:
   every token of documentation the agent reads is money spent and space taken from the task
   it is actually doing.
-- **How much that amount swung** from question to question, as a standard deviation. A
-  predictable cost is easier to budget than a cheap average with bad spikes.
+- **How much that amount varied** from the cheapest question to the dearest. A method
+  whose cost is predictable is easier to plan around than one with a cheap average and
+  occasional spikes.
 - **Dollars** of model usage.
 
 ## The result
 
-| | Right answers | Documentation pulled in | Swing (sd) | Cost |
+| | Right answers | Documentation pulled in | Cheapest to dearest question | Cost |
 | --- | --- | --- | --- | --- |
 | No documentation | 11/50, 22% | nothing to read | n/a | $0.88 |
-| Search | 49/50, 98% | 190,633 tokens | 3,314 | $1.29 |
-| **das index, current release** | **50/50, 100%** | **82,806 tokens** | **679** | **$0.94** |
-| das index, previous release | 44/50, 88% | 260,109 tokens | 2,527 | $1.18 |
+| Search | 49/50, 98% | 190,633 tokens | 1,310 to 13,375 | $1.29 |
+| **das index, current release** | **50/50, 100%** | **82,806 tokens** | **1,017 to 2,243** | **$0.94** |
+| das index, previous release | 44/50, 88% | 260,109 tokens | 3,045 to 9,245 | $1.18 |
 
 **Searching and the current release both answered almost everything correctly. The current
-release did it while reading 2.3x less documentation.** It read less on all ten questions. The widest gap was on the question whose answer has to be
-described rather than matched by a keyword, where it read about one sixth of what searching
-did. The narrowest was where one obvious keyword lands the answer, and even there it read
-less. The swing between questions was 4.9x smaller, and the bill was 27% lower.
+release did it while reading 2.3x less documentation.** It read less on all ten questions.
+The widest gap was on the question whose answer has to be described rather than matched by
+a keyword, where it read about one sixth of what searching did. The narrowest was where one
+obvious keyword lands the answer, and even there it read less.
+
+Its cost was also far more predictable. Searching ranged from 1,310 tokens on its cheapest
+question to 13,375 on its dearest, a tenfold spread, because a search costs whatever the
+chosen word happens to be common in. The index ranged from 1,017 to 2,243, roughly
+twofold, because walking a tree costs whatever its depth is. The bill was 27% lower.
 
 **The previous release was worse than searching on both measures.** It read 1.4x more
 documentation, and it got 44 of 50 right against searching's 49, so six behind the current

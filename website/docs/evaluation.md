@@ -42,14 +42,13 @@ documentation.
 - **Documentation text pulled in**, counted in tokens. This is the real cost of retrieval:
   every token of documentation the agent reads is money spent and space taken from the task
   it is actually doing.
-- **How much that amount varied** from the cheapest question to the dearest. A method
-  whose cost is predictable is easier to plan around than one with a cheap average and
-  occasional spikes.
+- **How much that amount varied** from one question to the next. A method whose cost is
+  predictable is easier to plan around than one with a low average and occasional spikes.
 - **Dollars** of model usage.
 
 ## The result
 
-| | Right answers | Documentation pulled in | Cheapest to dearest question | Cost |
+| | Right answers | Documentation pulled in, all 50 runs | Per question, least to most | Cost |
 | --- | --- | --- | --- | --- |
 | No documentation | 11/50, 22% | nothing to read | n/a | $0.88 |
 | Search | 49/50, 98% | 190,633 tokens | 1,310 to 13,375 | $1.29 |
@@ -62,10 +61,11 @@ The widest gap was on the question whose answer has to be described rather than 
 a keyword, where it read about one sixth of what searching did. The narrowest was where one
 obvious keyword lands the answer, and even there it read less.
 
-Its cost was also far more predictable. Searching ranged from 1,310 tokens on its cheapest
-question to 13,375 on its dearest, a tenfold spread, because a search costs whatever the
-chosen word happens to be common in. The index ranged from 1,017 to 2,243, roughly
-twofold, because walking a tree costs whatever its depth is. The bill was 27% lower.
+Its cost was also far more predictable. Searching read as little as 1,310 tokens on one
+question and as much as 13,375 on another, a tenfold spread, because a search costs
+whatever the word you picked happens to be common in. The index stayed between 1,017 and
+2,243, roughly twofold, because walking a tree costs whatever the tree is deep. The bill
+was 27% lower.
 
 **The previous release was worse than searching on both measures.** It read 1.4x more
 documentation, and it got 44 of 50 right against searching's 49, so six behind the current

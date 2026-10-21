@@ -69,7 +69,7 @@ flowchart TD
 
     Index --> TocFits{"rendered ToC\nfits budget?"}
     TocFits -->|yes| Recurse["Recurse into each child\n(same decision per child)"]
-    TocFits -->|no| Group["Partition entries into\nbudget-sized group-N/index.md files,\nlabeled by first/last entry,\napplied recursively"]
+    TocFits -->|no| Group["Partition entries into\nbudget-sized group-N/_das-index.md files,\nlabeled by first/last entry,\napplied recursively"]
     Group --> GroupOk{"every entry's own\nline fits alone?"}
     GroupOk -->|yes| Recurse
     GroupOk -->|no| FlagIndex["Flag file in\noversizedIndexes\n(irreducible entry)"]

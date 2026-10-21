@@ -1,6 +1,6 @@
 ---
 title: "Results: no docs against search against a das index"
-description: "Navigating the index das builds today reached the same answers as searching the raw files while reading 2.3x less documentation, on every question. The published 0.2.0 build reads more than plain search."
+description: "Navigating the index from the `1688c38` build reached the same answers as searching the raw files while reading 2.3x less documentation, on every question. 0.2.0, the version published when this ran, reads more than plain search."
 metadata:
   id: eval5.unregistered.results
   owner: akelstrom
@@ -22,13 +22,13 @@ tokens read into context** (what the retrieval actually cost), **per-question va
 | --- | --- | --- | --- | --- |
 | Nothing available | 22% | none to read | n/a | $0.88 |
 | Searched the raw files | 98% | 190,633 | 3,314 | $1.29 |
-| **Navigated the index das builds today** | **100%** | **82,806** | **679** | **$0.94** |
+| **Navigated the index from `1688c38`** | **100%** | **82,806** | **679** | **$0.94** |
 | Navigated the index das 0.2.0 builds | 88% | 260,109 | 2,527 | $1.18 |
 
 **Accuracy: unchanged, 100% against search's 98%, which is one answer in fifty.
 Documentation tokens read: 2.3x fewer, and fewer on all ten questions. Per-question
 variance: 4.9x lower. Dollars: 27% less.** The published 0.2.0 build reads 1.4x more
-documentation than plain search, so today's npm package costs more context than not using
+documentation than plain search, so that release costs more context than not using
 it.
 
 Three things this does **not** say:

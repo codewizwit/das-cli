@@ -5,12 +5,26 @@ title: Does the index earn its tokens?
 
 ## The test
 
-Ten questions with mechanically checkable answers, about a 98-file documentation corpus,
-asked four ways: with no documentation available, by searching the raw files, by navigating
-the index das builds now, and by navigating the index the previous release built. Five runs
-per condition per question, 200 runs, zero failures, $4.29. Same corpus, same model, same
-tool permissions, same grader. The only thing that varied was how the agent reached the
-documentation.
+Ten questions with mechanically checkable answers about a 98-file documentation corpus,
+asked four ways, five runs each. 200 runs, zero failures, $4.29.
+
+**The control: no documentation available.** Its job is to prove the questions actually
+require the corpus rather than being answerable from what the model already knows. It
+scored 22%, so they do. Without that arm, the other three numbers mean nothing.
+
+**The baseline: search the raw files.** Read, grep and glob over the documentation in its
+original form, which is what an agent does today and the thing worth beating.
+
+**What was changed: only the route to the documentation.** Two arms navigated a generated
+index instead of searching, one built by the current release and one by the previous one.
+Between those two, the only difference is which version generated the skill.
+
+**What was held constant:** the corpus, pinned and copied into every trial; the model; the
+tool permissions; the grader; and the question set, frozen and hashed before the first run.
+
+**What was measured:** accuracy, graded mechanically with a gate that scores a refusal or a
+clarifying question as zero; documentation tokens read into context, which is what
+retrieval actually cost; the per-question variance of those tokens; and dollars.
 
 ## The result
 

@@ -8,19 +8,21 @@ title: Does the index earn its tokens?
 Ten questions with mechanically checkable answers about a 98-file documentation corpus,
 asked four ways, five runs each. 200 runs, zero failures, $4.29.
 
-**The control: no documentation available.** Its job is to prove the questions actually
-require the corpus rather than being answerable from what the model already knows. It
-scored 22%, so they do. Without that arm, the other three numbers mean nothing.
+**Controlled for:** the documentation corpus, pinned at a commit and copied into every
+trial; the task set, frozen and hashed before the first run; the model; the tool
+permissions; and the grader. None of these differ between arms.
+
+**The negative control: no documentation available.** An arm expected to fail, whose job
+is to prove the questions require the corpus rather than being answerable from what the
+model already knows. It scored 22%, so they do. Without it the other three numbers mean
+nothing.
 
 **The baseline: search the raw files.** Read, grep and glob over the documentation in its
 original form, which is what an agent does today and the thing worth beating.
 
-**What was changed: only the route to the documentation.** Two arms navigated a generated
-index instead of searching, one built by the current release and one by the previous one.
-Between those two, the only difference is which version generated the skill.
-
-**What was held constant:** the corpus, pinned and copied into every trial; the model; the
-tool permissions; the grader; and the question set, frozen and hashed before the first run.
+**The variable: only the route to the documentation.** Two arms navigated a generated index
+instead of searching, one built by the current release and one by the previous one. Between
+those two the only difference is which version generated the skill.
 
 **What was measured:** accuracy, graded mechanically with a gate that scores a refusal or a
 clarifying question as zero; documentation tokens read into context, which is what

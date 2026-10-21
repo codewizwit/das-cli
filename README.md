@@ -4,14 +4,14 @@
 
 **Documentation as Skills.** `das` slices documentation into context-efficient chunks with an index, so Claude loads only what it needs on demand. Point it at a GitHub URL, a Markdown file, a docs folder, or a project root.
 
-What improves is context spent per question. Measured on a 98-file documentation set, 200 runs, Haiku:
+What improves is how much documentation the agent has to read. Measured on a 98-file documentation set, 200 runs, Haiku:
 
-- Accuracy: unchanged, 100% against search's 98%
-- Documentation tokens read into context: 2.3x fewer (82,806 against 190,633), lower on every question
-- Per-question variance: 4.9x lower (679 against 3,314)
-- Dollars: 27% less
+- **Documentation read: 2.3x less** than searching the same files, 82,806 tokens against 190,633, and lower on every one of the ten questions
+- **Predictable: 1,017 to 2,243 tokens per question**, where searching ranged from 1,310 to 13,375
+- **Right answers: 50 of 50**, the highest of the four conditions, against 49 of 50 for searching. One answer in fifty is inside chance, so nothing got worse
+- **Cost: 27% less**
 
-One corpus, one model, and every file in it carries an authored description, which is the layer the index renders. Having documentation at all is what moves accuracy, from 22% to 98%. Full method, per-question numbers and limits: [`eval5/unregistered-threeway/results.md`](eval5/unregistered-threeway/results.md).
+One corpus, one model, and every file in it carries a description its author wrote, which is what the index renders. Having documentation at all is what moves accuracy, from 22% to 98%, and searching collects that too. Full method and limits: [the evaluation](https://codewizwit.github.io/das-cli/docs/evaluation).
 
 ```
 das add https://github.com/prisma/docs

@@ -83,10 +83,11 @@ gap belongs to the documentation existing, not to how the agent reaches it, beca
 searching collects the same 98%.
 
 **What separated the two das versions was the quality of the descriptions.** The table of
-contents gives the agent one line per section to choose from. The old version used the
-author's own summary on 8 of the 98 entries and left the rest blank or truncated. The new
-one uses it on all 98. Five earlier runs of this comparison found no difference; this is
-the first that did.
+contents gives the agent one line per section to choose from. The new version puts a real
+description on every one of the 98 entries, each written by the document's own author
+rather than generated. The old version managed 8, and left the rest blank or cut off
+mid-sentence. Five earlier runs of this comparison found no difference; this is the first
+that did.
 
 **A bad index is worse than no index.** The previous release is the proof: it charged more
 than searching and answered fewer questions. An index the agent has to walk through costs

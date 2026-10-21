@@ -73,14 +73,17 @@ release.
 
 ## What it means
 
-**Retrieval got cheaper. Accuracy held rather than improved.** The cost result is solid: it
-held on every question. The accuracy result is not a win. 100% against 98% is a single
-answer out of fifty, which is well inside what chance produces at this sample size. The
-honest claim is that nothing got worse.
+**The agent answered the same questions on less than half the reading.** That is the result,
+and it is the most robust number here: it held on all ten questions, so it is not an average
+hiding spikes. Two things follow. Documentation the agent does not have to read is context
+window left for the work it was asked to do, which is the scarce resource in any long task.
+And a cost that stays between 1,017 and 2,243 tokens is one you can plan around, where a
+cost that swings to 13,375 is one you discover afterwards.
 
-**The big accuracy effect is having documentation at all.** 22% with none, 98% with it. That
-gap belongs to the documentation existing, not to how the agent reaches it, because plain
-searching collects the same 98%.
+**Accuracy held.** 100% against searching's 98% is one answer out of fifty, inside what
+chance produces at this sample size, so the honest claim is that nothing got worse. The
+large accuracy effect belongs to having documentation at all, 22% to 98%, and searching
+collects that too.
 
 **What separated the two das versions was the descriptions in the table of contents.** That
 list is what the agent reads to decide which document to open, one line per entry. In the

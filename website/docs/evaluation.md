@@ -3,74 +3,104 @@ id: evaluation
 title: Does the index earn its tokens?
 ---
 
-## The test
+## What was being tested
 
-Ten questions with mechanically checkable answers about a 98-file documentation corpus,
-asked four ways, five runs each. 200 runs, zero failures, $4.29.
+When an AI coding agent needs to answer a question from a team's documentation, it normally
+searches the files, the way you would with grep. That works, but it returns whatever text
+happens to sit near the matching word, and the agent pays for all of it.
 
-**Controlled for:** the documentation corpus, pinned at a commit and copied into every
-trial; the task set, frozen and hashed before the first run; the model; the tool
-permissions; and the grader. None of these differ between arms.
+`das` offers a different route. It turns a documentation set into a table of contents: a
+top-level index that names each section and describes it, pointing down to smaller indexes
+and finally to the documents themselves. The agent reads the index first and opens only the
+page it needs.
 
-**The negative control: no documentation available.** An arm expected to fail, whose job is
-to prove the questions require the corpus rather than being answerable from what the model
-already knows. It scored 22%, so they do. Without it the other three numbers mean nothing.
+The question is whether that is actually better. Reading an index costs tokens too, so it
+could easily cost more than just searching and return the same answers.
 
-**The baseline: search the raw files.** Read, grep and glob over the documentation in its
-original form, which is what an agent does today and the thing worth beating.
+## How it was tested
 
-**The variable: the das-cli index.** Two arms navigated a `das`-generated `_das-index.md`
-tree instead of searching the files, one skill built by the previous release and one by the
-current release. Between those two arms the only difference is which version generated the
-skill, so anything separating them is attributable to the generator.
+Ten questions about a documentation set of 98 files. Each question had a verifiable answer,
+so grading was mechanical rather than a judgement call. Every question was asked four
+different ways, five times each: 200 runs in total, no failures, $4.29 of model usage.
 
-**What was measured:** accuracy, graded mechanically with a gate that scores a refusal or a
-clarifying question as zero; documentation tokens read into context, which is what
-retrieval actually cost; the per-question variance of those tokens; and dollars.
+**The four ways:**
+
+| | What the agent could do |
+| --- | --- |
+| **No documentation** | Nothing to read. The check that these questions genuinely need the docs |
+| **Search** | Read and grep the documentation files directly. The thing worth beating |
+| **das index, current release** | Navigate the table of contents das generates, no searching allowed |
+| **das index, previous release** | The same, from the previous version of das |
+
+**Held identical across all four:** the documentation, the questions, the model, which tools
+were available, and the grader. The only thing that changed was how the agent got to the
+documentation.
+
+**What was counted:**
+
+- **Right answers.** A refusal or a question back scored zero, so a non-answer could not pass.
+- **Documentation text pulled in**, counted in tokens. This is the real cost of retrieval:
+  every token of documentation the agent reads is money spent and space taken from the task
+  it is actually doing.
+- **How much that amount swung** from question to question, as a standard deviation. A
+  predictable cost is easier to budget than a cheap average with bad spikes.
+- **Dollars** of model usage.
 
 ## The result
 
-| Arm | Accuracy | Doc tokens read | Variance (sd) | Cost |
+| | Right answers | Documentation pulled in | Swing (sd) | Cost |
 | --- | --- | --- | --- | --- |
-| Negative control, no documentation | 11/50, 22% | none to read | n/a | $0.88 |
-| Baseline, searched the raw files | 49/50, 98% | 190,633 | 3,314 | $1.29 |
-| **The das-cli index, current release** | **50/50, 100%** | **82,806** | **679** | **$0.94** |
-| The das-cli index, previous release | 44/50, 88% | 260,109 | 2,527 | $1.18 |
+| No documentation | 11/50, 22% | nothing to read | n/a | $0.88 |
+| Search | 49/50, 98% | 190,633 tokens | 3,314 | $1.29 |
+| **das index, current release** | **50/50, 100%** | **82,806 tokens** | **679** | **$0.94** |
+| das index, previous release | 44/50, 88% | 260,109 tokens | 2,527 | $1.18 |
 
-**Against the baseline, the current release read 2.3x fewer documentation tokens for the
-same answers.** It was lower on all ten questions, from 0.17x on the question whose answer
-has to be described rather than matched by a search term, to 0.78x where one obvious term
-lands it. Per-question variance fell 4.9x and dollars fell 27%. It scored the highest
-accuracy of the four arms.
+**The current release got the same answers while reading 2.3x less documentation.** It read
+less on all ten questions. The widest gap was on the question whose answer has to be
+described rather than matched by a keyword, where it read about one sixth of what searching
+did. The narrowest was where one obvious keyword lands the answer, and even there it read
+less. The swing between questions was 4.9x smaller, and the bill was 27% lower.
 
-**The previous release lost on both.** It read 1.4x more than plain search and scored 44 of
-50, five answers below the baseline and six below the current release.
+**The previous release lost on both counts.** It read 1.4x more than plain searching and got
+44 of 50 right, five fewer than searching and six fewer than the current release.
 
 ## What it means
 
-**Retrieval got cheaper, and accuracy held rather than improved.** The token result has a
-margin that survives repetition. The accuracy result does not: 100% against the baseline's
-98% is one answer in fifty, which no test on 50 runs per arm separates from chance, so it
-is non-degradation and not an improvement. The 78-point gap against no documentation is the
-large effect, and it belongs to having documentation rather than to how it is reached, since
-plain search collects the same 98%.
+**Retrieval got cheaper. Accuracy held rather than improved.** The cost result is solid: it
+held on every question. The accuracy result is not a win. 100% against 98% is a single
+answer out of fifty, which is well inside what chance produces at this sample size. The
+honest claim is that nothing got worse.
 
-**What moved was the structure, not the retrieval method.** The two index arms differ only
-in which build generated the skill. Between them, authored `description` frontmatter
-reaching an index entry went from 8 of 98 to 98 of 98, and resource bodies went from 0 of 98
-byte-identical to their source to 98 of 98. Five earlier comparisons of retrieval method all
-returned a tie. The one that moved was the one that varied how much of the authored layer
-survived generation.
+**The big accuracy effect is having documentation at all.** 22% with none, 98% with it. That
+gap belongs to the documentation existing, not to how the agent reaches it, because plain
+searching collects the same 98%.
 
-**A badly built index is worse than no index.** The previous release is the evidence: it
-cost more tokens than searching the files and answered fewer questions correctly. The index
-is a rendering of the authored layer, so when little of that layer reaches it, an agent pays
-for navigation and gets nothing back.
+**What made the difference between the two das versions was how much of the documentation's
+own writing survived.** Each file in this set carries a one-line description written by its
+author. The previous version of das kept 8 of those 98 descriptions in the index and
+replaced the rest with text chopped off mid-sentence. The current version keeps all 98. It
+also copies each document through unchanged, where the old version rebuilt it and altered
+the formatting.
 
-**Where it does not apply.** One corpus, in which every file carries an authored
-description, so a corpus without that layer should not be expected to behave this way. One
-model. And the agent was told to use the index; left to choose, an agent has been measured
-invoking it 0 times in 3, which is the next thing to test.
+So the index is a rendering of what people already wrote. Five earlier runs of this
+comparison, on different documentation sets and different kinds of question, all came out
+even. The one that moved was the one that changed how much of the authors' own writing
+reached the agent.
 
-Method, per-question numbers, raw per-run data and the full write-up are in the repository
-under `eval5/unregistered-threeway/`.
+**A bad index is worse than no index.** The previous release is the proof: it charged more
+than searching and answered fewer questions. An index the agent has to walk through costs
+something, so if it is not carrying real information, the agent pays and gets nothing.
+
+## Where this does not apply
+
+- **One documentation set**, and one where every file carries an author-written description.
+  A set without that will not behave this way, and a separate test confirmed it: strip those
+  descriptions out and the index loses more ground than searching does.
+- **One model.**
+- **The agent was told to use the index.** Left to decide for itself, an agent has been
+  measured reaching for the index 0 times out of 3 and searching instead. Closing that gap is
+  the next piece of work, and until it is closed these numbers describe an agent that was
+  pointed at the index rather than one that chose it.
+
+Method, per-question numbers and raw per-run data are in the repository under
+`eval5/unregistered-threeway/`.

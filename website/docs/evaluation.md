@@ -1,23 +1,18 @@
 ---
 id: evaluation
 title: Does the index earn its tokens?
-sidebar_position: 4
 ---
 
-# Does the index earn its tokens?
+## The test
 
-Six controlled comparisons of how an agent reaches documentation. **Five found nothing.**
-The sixth is below.
-
-The honest summary first: on one authored corpus, navigating a generated index reached the
-same answers as searching the raw files while reading **2.3x fewer documentation tokens**,
-and das (previous version) read **1.4x more** than plain search. It also scored the
-highest accuracy of the four conditions, by a margin too small to call an improvement.
-Everything after this paragraph is the method and the limits.
+Ten questions with mechanically checkable answers, about a 98-file documentation corpus,
+asked four ways: with no documentation available, by searching the raw files, by navigating
+the index das builds now, and by navigating the index the previous release built. Five runs
+per condition per question, 200 runs, zero failures, $4.29. Same corpus, same model, same
+tool permissions, same grader. The only thing that varied was how the agent reached the
+documentation.
 
 ## The result
-
-Ten questions, four conditions, five runs each. 200 runs, zero failures, $4.29.
 
 | How the model reached the documentation | Accuracy | Doc tokens read | Variance (sd) | Cost |
 | --- | --- | --- | --- | --- |
@@ -26,102 +21,32 @@ Ten questions, four conditions, five runs each. 200 runs, zero failures, $4.29.
 | **The index, das (current version)** | **50/50, 100%** | **82,806** | **679** | **$0.94** |
 | The index, das (previous version) | 44/50, 88% | 260,109 | 2,527 | $1.18 |
 
-Four outcome metrics, named: **accuracy** (answers graded correct), **documentation tokens
-read into context** (what retrieval cost), **per-question variance** (standard deviation of
-those tokens), and **dollars**.
+The index read **2.3x fewer documentation tokens** than search for the same answers, and it
+was lower on all ten questions, from 0.17x on the question whose answer has to be described
+rather than matched, to 0.78x where one obvious search term lands it. Per-question variance
+fell **4.9x**. It scored the highest accuracy of the four conditions. The previous release
+read **1.4x more** than plain search.
 
-**On accuracy the index scored highest of the four conditions, and the margin over search
-is inside the noise.** 100% against 98% is one answer in fifty, which no test on 50 runs
-per arm distinguishes from chance, so this is a non-degradation result rather than an
-improvement. Two comparisons are larger. Against the previous version the gap is six
-answers in fifty, all favouring the current one, which is suggestive and rests on two
-questions. Against no documentation at all it is 78 points, which is the large effect, and
-it belongs to having documentation rather than to how the documentation is reached, since
-plain search collects the same 98%.
+## What it means
 
-The retrieval-cost result is the one with a margin that survives repetition.
+**Retrieval got cheaper and nothing else measurably changed.** The token result has a
+margin that survives repetition. The accuracy result does not: 100% against 98% is one
+answer in fifty, which no test on 50 runs per arm separates from chance, so it is
+non-degradation rather than improvement. The 78-point gap against no documentation is the
+large effect, and it belongs to having documentation rather than to how it is reached,
+since plain search collects the same 98%.
 
-## Cheaper on every question, and the gap tracks the mechanism
+**What moved was the structure, not the retrieval method.** The two index arms differ only
+in which build generated the skill. Between them, authored `description` frontmatter
+reaching an index entry went from 8 of 98 to 98 of 98, and resource bodies went from 0 of
+98 byte-identical to their source to 98 of 98. Five earlier comparisons of retrieval method
+all returned a tie. The one that moved was the one that varied how much of the authored
+layer survived generation.
 
-Median documentation tokens over five runs per cell.
+**Where it does not apply.** One corpus, where every file carries an authored description,
+so a corpus without that layer should not be expected to behave this way. One model. And
+the agent was told to use the index; left to choose, an agent has been measured invoking it
+0 times in 3, which is the next thing to test.
 
-| Question | Two documents needed | One search term lands it | Search | Index | Ratio |
-| --- | --- | --- | --- | --- | --- |
-| q01 | | yes | 1,654 | 1,117 | 0.68 |
-| q02 | | yes | 5,648 | 2,237 | 0.40 |
-| q03 | | yes | 2,177 | 1,645 | 0.76 |
-| q04 | | no | 1,687 | 1,125 | 0.67 |
-| q05 | | yes | 1,310 | 1,017 | 0.78 |
-| q06 | | no | 5,270 | **1,068** | **0.20** |
-| q07 | | no | **13,375** | 2,243 | **0.17** |
-| q08 | yes | no | 3,080 | 1,453 | 0.47 |
-| q09 | yes | no | 2,660 | 2,080 | 0.78 |
-| q10 | | no | 2,979 | 1,151 | 0.39 |
-
-Where one obvious search term lands the answer, the index saves 22 to 32 percent. Where no
-single term does, it saves 61 to 83 percent. Search's worst case, q07 at 13,375 tokens, is
-a question whose answer has to be described rather than matched.
-
-## Cost variance falls 4.9x
-
-Standard deviation per question is 679 for the index against 3,314 for search, on a mean
-2.3x lower. Navigation cost tracks tree depth, which is bounded. Search cost tracks how
-common the chosen term happens to be, which is not.
-
-An earlier run raised this at n=22 and declined to lean on it. At 50 runs per arm it holds,
-and it is the more durable claim than the mean.
-
-## Why the generator mattered and the retrieval method did not
-
-The two index arms differ only in which build produced the skill. What changed between
-them is how much of the corpus's authored metadata reached the index:
-
-| | das (previous version) | das (current version) |
-| --- | --- | --- |
-| Resource body byte-identical to its source | 0/98 | **98/98** |
-| Sentence coverage of source prose | 97.8% | **100%** |
-| Authored `description` carried into an index entry | **8/98** | **98/98** |
-
-So the index is a rendering of the authored layer, and the published build was rendering
-8% of it. Five prior comparisons of *retrieval method* returned a tie. The comparison that
-moved was the one that varied how much structure survived generation.
-
-## What this does not show
-
-- **The accuracy margin over search is not an improvement.** Near ceiling for both arms,
-  so the instrument had little power to detect a small difference either way. The right
-  term is non-inferiority, and the right phrasing is no measured degradation. Scoring
-  highest of the four conditions is a fact about this run, not a claim about the next one.
-- **One corpus**, 98 files and about 105,000 tokens, where every file carries an authored
-  description. A corpus without that layer should not be expected to behave this way. A
-  separate run measured the reverse case: strip the authored layer and the index arm loses
-  four checks while search loses one.
-- **One model**, `claude-haiku-4-5-20251001`.
-- **The agent was told to use the index**, by opening the prompt with the skill as a
-  command. Left to choose, an agent has been measured invoking the skill 0 times in 3.
-  That gap is unmeasured here and is the next thing to test.
-- **One question does not discriminate.** The no-documentation arm answered q03 correctly
-  5 of 5, so the control floor is about 2 of 10 rather than 0.
-- **Five runs per cell on ten questions.** Enough for the token result, which is consistent
-  on every question. Not enough for the accuracy comparison.
-
-## Method
-
-| | |
-| --- | --- |
-| Builds compared | das 0.3.0, called current version here, against das 0.2.0, called previous version |
-| Corpus | 98 markdown files, 105,034 est. tokens, pinned at a commit and copied into every trial |
-| Task set | 10 questions, frozen and hashed before any run, 8 single-document and 2 two-document, 4 of 10 landable by one obvious search term |
-| Grading | mechanical, required-substring groups per question, with a gate scoring a refusal or a clarifying question as zero |
-| Isolation | `env -i`, an empty per-trial `HOME`, a trial root outside the home directory, path-scoped deny rules, and a live containment assertion before the sweep |
-| Arms | identical corpus, model, flags and grader; only the route to the documentation differs |
-
-Ground truth was verified against the corpus before the set was frozen, with frontmatter
-stripped from the source files first. That check caught three questions labelled
-two-document that one file could answer, because every file's frontmatter contains the
-field names one question asked for.
-
-The instrument, the raw per-run data and the full write-up are in the repository under
-`eval5/unregistered-threeway/`. This run was not pre-registered, and it is not the
-registered comparison described in `eval5/PREREGISTRATION.md`, which holds das version as
-the only variable on two public corpora.
+Method, per-question numbers, raw per-run data and the full write-up are in the repository
+under `eval5/unregistered-threeway/`.

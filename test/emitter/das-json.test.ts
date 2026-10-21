@@ -42,8 +42,8 @@ describe("das-json", () => {
     await rm(skillDir, { recursive: true, force: true });
   });
 
-  it("exports SLICER_VERSION as 1", () => {
-    expect(SLICER_VERSION).toBe(1);
+  it("exports SLICER_VERSION as 2", () => {
+    expect(SLICER_VERSION).toBe(2);
   });
 
   it("round-trips a valid das.json through write then read", async () => {

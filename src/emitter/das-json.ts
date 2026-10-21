@@ -2,8 +2,15 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 
-/** The current das.json schema version emitted by this build of the slicer. */
-export const SLICER_VERSION = 1;
+/**
+ * The current das.json schema version emitted by this build of the slicer.
+ *
+ * Bumped to 2 for the passthrough emission change: resources are byte copies at
+ * mirrored source paths and the generated index is named `_das-index.md`. Because
+ * `sourceHash` covers this value, the bump is what makes an already-installed
+ * skill regenerate on refresh instead of reading as unchanged.
+ */
+export const SLICER_VERSION = 2;
 
 const skillNamePattern = /^[a-z0-9][a-z0-9-]*$/;
 const semverLikePattern = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;

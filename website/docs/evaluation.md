@@ -11,8 +11,9 @@ The sixth is below.
 
 The honest summary first: on one authored corpus, navigating a generated index reached the
 same answers as searching the raw files while reading **2.3x fewer documentation tokens**,
-and das (previous version) read **1.4x more** than plain search. Accuracy did not
-change. Everything after this paragraph is the method and the limits.
+and das (previous version) read **1.4x more** than plain search. It also scored the
+highest accuracy of the four conditions, by a margin too small to call an improvement.
+Everything after this paragraph is the method and the limits.
 
 ## The result
 
@@ -29,8 +30,16 @@ Four outcome metrics, named: **accuracy** (answers graded correct), **documentat
 read into context** (what retrieval cost), **per-question variance** (standard deviation of
 those tokens), and **dollars**.
 
-**Accuracy is not the finding.** 100% against 98% is one answer in fifty. What moved
-accuracy was having documentation at all, 22% to 98%.
+**On accuracy the index scored highest of the four conditions, and the margin over search
+is inside the noise.** 100% against 98% is one answer in fifty, which no test on 50 runs
+per arm distinguishes from chance, so this is a non-degradation result rather than an
+improvement. Two comparisons are larger. Against the previous version the gap is six
+answers in fifty, all favouring the current one, which is suggestive and rests on two
+questions. Against no documentation at all it is 78 points, which is the large effect, and
+it belongs to having documentation rather than to how the documentation is reached, since
+plain search collects the same 98%.
+
+The retrieval-cost result is the one with a margin that survives repetition.
 
 ## Cheaper on every question, and the gap tracks the mechanism
 
@@ -79,9 +88,10 @@ moved was the one that varied how much structure survived generation.
 
 ## What this does not show
 
-- **Not an accuracy improvement.** Near ceiling for both the search arm and das (current version),
+- **The accuracy margin over search is not an improvement.** Near ceiling for both arms,
   so the instrument had little power to detect a small difference either way. The right
-  term is non-inferiority, and the right phrasing is no measured degradation.
+  term is non-inferiority, and the right phrasing is no measured degradation. Scoring
+  highest of the four conditions is a fact about this run, not a claim about the next one.
 - **One corpus**, 98 files and about 105,000 tokens, where every file carries an authored
   description. A corpus without that layer should not be expected to behave this way. A
   separate run measured the reverse case: strip the authored layer and the index arm loses

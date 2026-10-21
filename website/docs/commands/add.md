@@ -35,9 +35,10 @@ Resolves the source, previews the generated skill (name, description, section tr
 | `--name <name>`               | Skill name; otherwise asked in the wizard.                                                                                                                 |
 | `--description <text>`        | `SKILL.md` frontmatter description; otherwise asked in the wizard.                                                                                         |
 | `--no-hook`                   | Skip the `SessionStart` hook prompt and install.                                                                                                           |
-| `--yes`                       | Accept every default non-interactively. Also aborts instead of silently proceeding if the [injection scan](/docs/security#injection-scan) finds something. |
+| `--yes`                       | Accept every default non-interactively. Also aborts instead of silently proceeding if the [injection scan](/docs/security#injection-scan) finds something, unless `--accept-scan-findings` is also passed. |
 | `--include-large`             | Include files over the 1MB size guard instead of skipping them.                                                                                            |
 | `--token-budget <n>`          | Per-file token budget; see [Progressive disclosure](/docs/concepts/progressive-disclosure).                                                                |
 | `--force`                     | Overwrite a name collision with a skill from a different source.                                                                                           |
+| `--accept-scan-findings`      | Proceed past [injection scan](/docs/security#injection-scan) findings without a prompt. Use only on a corpus whose findings you have already reviewed, such as documentation that quotes an injection as an example.        |
 
 See [Add a remote library's docs](/docs/guides/add-a-remote-library) and [Add a local docs folder](/docs/guides/add-local-docs) for worked examples.

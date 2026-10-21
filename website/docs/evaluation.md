@@ -82,17 +82,12 @@ honest claim is that nothing got worse.
 gap belongs to the documentation existing, not to how the agent reaches it, because plain
 searching collects the same 98%.
 
-**What made the difference between the two das versions was how much of the documentation's
-own writing survived.** Each file in this set carries a one-line description written by its
-author. The previous version of das kept 8 of those 98 descriptions in the index and
-replaced the rest with text chopped off mid-sentence. The current version keeps all 98. It
-also copies each document through unchanged, where the old version rebuilt it and altered
-the formatting.
-
-So the index is a rendering of what people already wrote. Five earlier runs of this
-comparison, on different documentation sets and different kinds of question, all came out
-even. The one that moved was the one that changed how much of the authors' own writing
-reached the agent.
+**What separated the two das versions was the descriptions.** Every file here carries a
+one-line description its author wrote on purpose. The old version carried 8 of those 98
+into the index and filled the rest with sentences chopped off mid-word. The new one carries
+all 98. An index is only a rendering of what someone already wrote, and that is the whole
+difference. Five earlier runs of this comparison, on other documentation sets, all came out
+even; this is the first one that moved.
 
 **A bad index is worse than no index.** The previous release is the proof: it charged more
 than searching and answered fewer questions. An index the agent has to walk through costs

@@ -77,31 +77,6 @@ So the index is a rendering of the authored layer, and the published build was r
 8% of it. Five prior comparisons of *retrieval method* returned a tie. The comparison that
 moved was the one that varied how much structure survived generation.
 
-## The instrument had four defects
-
-Each would have invalidated the result. All four were found before the sweep ran.
-
-1. **`claude -p` with `HOME` overridden is not isolated.** Project-instruction discovery
-   walks the working directory's ancestors and excludes only `~/.claude/CLAUDE.md`.
-   Overriding `HOME` re-points `~`, so the real user file becomes an ordinary ancestor
-   file. Canaries leaked from four of six locations.
-2. **`--bare` and `--restricted` remove the mechanism under test.** `--bare` loads no
-   skills at all; `--restricted` loads built-ins but not `.claude/skills/`. So the flags
-   that close defect 1 cannot be used in any arm that needs a project skill.
-3. **`--allowed-tools` only pre-approves.** A Bash call ran and echoed its marker under
-   `--allowed-tools Read Grep Glob`. Bash was attempted in 8 of 10 runs in the search arm
-   and 2 of 10 in the index arm, so the arms were not tool-matched until every unwanted
-   tool was denied explicitly.
-4. **An overridden `HOME` does not restrict file reads.** A trial globbed `/Users/**` and
-   read files from the real home directory, so a no-documentation arm could reach the
-   corpus by absolute path. Path-scoped deny rules do block it, and the absolute-path form
-   needs a leading `//`.
-
-Defect 4 was large: under containment the control arm's documentation tokens fell from
-33,581 to 4,253. Every sweep now asserts that a trial answers `BLOCKED` when asked to read
-the corpus outside its own directory, because a clean sweep with no such control proves
-nothing about leakage.
-
 ## What this does not show
 
 - **Not an accuracy improvement.** Near ceiling for both the search arm and das (current version),
